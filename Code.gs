@@ -1,21 +1,30 @@
-const OWNER_KEY = "XXs7u2ajnpiZ7-K36Cis_2HramSTqRBIZHaPidRzh0HehH06DbeZ_CZQlWpsviZc";
+/*
+ * Our Memory Box — Google Apps Script backend
+ *
+ * SECURITY:
+ * Do not put a secret in the browser. This file contains no OWNER_KEY.
+ * If deployed as "Anyone", this endpoint is publicly callable. The Drive
+ * file is protected by the owner's Google account, but the endpoint itself
+ * is NOT an authentication boundary.
+ *
+ * For sensitive/private data, use an authenticated deployment/admin workflow
+ * instead of anonymous access.
+ */
 const FOLDER_NAME = 'Our Memory Box';
 const STATE_FILE_NAME = 'memory-box-backup.json';
 
 function doGet(e) {
-  const action = e && e.parameter ? e.parameter.action : '';
-  const key = e && e.parameter ? e.parameter.key : '';
-  const callback = e && e.parameter ? e.parameter.callback : '';
+  const action = e?.parameter?.action || '';
+  const callback = e?.parameter?.callback || '';
   try {
     if (action === 'restore') {
-      checkKey_(key);
       const payload = loadState_();
-      const result = JSON.stringify({ok:true, payload: payload});
+      const result = JSON.stringify({ok:true, payload});
       if (callback && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(callback)) {
         return ContentService.createTextOutput(callback + '(' + result + ');')
           .setMimeType(ContentService.MimeType.JAVASCRIPT);
       }
-      return json_({ok:true, payload:payload});
+      return json_({ok:true, payload});
     }
     return json_({ok:true, service:'Our Memory Box owner cloud', configured:true});
   } catch (err) {
@@ -25,12 +34,13 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const p = e && e.parameter ? e.parameter : {};
-    checkKey_(p.key);
+    const p = e?.parameter || {};
     if (p.action !== 'save') throw new Error('Unknown action');
     if (!p.payload) throw new Error('Missing backup payload');
+
     const obj = JSON.parse(p.payload);
     if (!obj || typeof obj !== 'object') throw new Error('Invalid backup payload');
+
     saveState_(JSON.stringify(obj));
     return json_({ok:true, savedAt:new Date().toISOString()});
   } catch (err) {
@@ -41,13 +51,13 @@ function doPost(e) {
 function setupOwnerDrive() {
   const folder = getFolder_();
   if (!findStateFile_(folder)) {
-    folder.createFile(STATE_FILE_NAME, JSON.stringify({version:1, savedAt:new Date().toISOString(), state:{}}), MimeType.PLAIN_TEXT);
+    folder.createFile(
+      STATE_FILE_NAME,
+      JSON.stringify({version:1, savedAt:new Date().toISOString(), state:{}}),
+      MimeType.PLAIN_TEXT
+    );
   }
   return {folderId:folder.getId(), folderName:folder.getName()};
-}
-
-function checkKey_(key) {
-  if (!key || key !== OWNER_KEY) throw new Error('Invalid cloud key');
 }
 
 function getFolder_() {
@@ -70,11 +80,8 @@ function findStateFile_(folder) {
 function saveState_(payload) {
   const folder = getFolder_();
   const existing = findStateFile_(folder);
-  if (existing) {
-    existing.setContent(payload);
-  } else {
-    folder.createFile(STATE_FILE_NAME, payload, MimeType.PLAIN_TEXT);
-  }
+  if (existing) existing.setContent(payload);
+  else folder.createFile(STATE_FILE_NAME, payload, MimeType.PLAIN_TEXT);
 }
 
 function loadState_() {

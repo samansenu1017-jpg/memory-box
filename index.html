@@ -1725,25 +1725,33 @@ function saveSettingsFromUI(){
 document.getElementById("saveSettingsBtn").addEventListener("click",saveSettingsFromUI);
 
 /* ---------- Owner-managed cloud backup ---------- */
+/*
+  IMPORTANT:
+  A static browser app cannot safely hide a secret. Anything shipped to
+  GitHub Pages can be inspected by visitors. This build therefore contains
+  no OWNER_KEY/cloudKey.
+
+  The direct cloud buttons remain available only when the backend URL is
+  configured. The backend itself must enforce authorization if the backup
+  contains private data.
+*/
 let cloudSyncBusy=false;
 
 function memoryCloudConfigured(){
   return !!(window.MEMORY_BOX_CONFIG?.cloudUrl &&
-    !String(window.MEMORY_BOX_CONFIG.cloudUrl).includes('PASTE_YOUR_') &&
-    window.MEMORY_BOX_CONFIG?.cloudKey &&
-    !String(window.MEMORY_BOX_CONFIG.cloudKey).includes('PASTE_'));
+    !String(window.MEMORY_BOX_CONFIG.cloudUrl).includes('PASTE_YOUR_'));
 }
 function updateDriveUI(){
   const configured=memoryCloudConfigured();
-  document.getElementById('driveStatus').textContent=configured?'Owner cloud configured ✓':'Owner backup not configured';
+  document.getElementById('driveStatus').textContent=configured
+    ? 'Cloud endpoint configured'
+    : 'Owner cloud not configured';
   document.getElementById('syncCloudBtn').disabled=!configured;
   document.getElementById('restoreCloudBtn').disabled=!configured;
   const help=document.getElementById('driveHelp');
-  if(configured){
-    help.textContent='Cloud backup is owner-managed. No Google account or OAuth screen is shown to the person using this app.';
-  }else{
-    help.textContent='The owner must finish the one-time backend setup before sending this app to another device.';
-  }
+  help.textContent=configured
+    ? 'This public app contains no owner cloud key. The backend must provide its own authorization.'
+    : 'Configure the owner backend URL before using cloud backup.';
 }
 function cloudJson(){
   return JSON.stringify({
@@ -1761,7 +1769,6 @@ function syncToCloud(manual=true){
   cloudSyncBusy=true;
   const cfg=window.MEMORY_BOX_CONFIG;
   try{
-    // A native form POST avoids browser CORS preflight and works with a Google Apps Script web app.
     let iframe=document.getElementById('memoryCloudFrame');
     if(!iframe){
       iframe=document.createElement('iframe');
@@ -1775,7 +1782,7 @@ function syncToCloud(manual=true){
     form.action=cfg.cloudUrl;
     form.target='memoryCloudFrame';
     form.style.display='none';
-    const fields={action:'save',key:cfg.cloudKey,payload:cloudJson()};
+    const fields={action:'save',payload:cloudJson()};
     Object.entries(fields).forEach(([name,value])=>{
       const input=document.createElement('input');
       input.type='hidden';
@@ -1786,7 +1793,7 @@ function syncToCloud(manual=true){
     document.body.appendChild(form);
     form.submit();
     setTimeout(()=>{form.remove();cloudSyncBusy=false;},2200);
-    if(manual)showToast('Cloud backup sent');
+    if(manual)showToast('Cloud backup request sent');
   }catch(err){
     console.error(err);
     cloudSyncBusy=false;
@@ -1809,7 +1816,7 @@ window.memoryBoxRestoreCallback=function(packet){
     showToast('Cloud backup restored');
   }catch(err){
     console.error(err);
-    showToast('Could not restore the cloud backup');
+    showToast(err.message||'Cloud restore failed');
   }finally{
     document.getElementById('memoryCloudRestoreScript')?.remove();
   }
@@ -1818,7 +1825,7 @@ function restoreFromCloud(){
   if(!memoryCloudConfigured()){showToast('Owner cloud is not configured yet');return;}
   const cfg=window.MEMORY_BOX_CONFIG;
   const callback='memoryBoxRestoreCallback';
-  const src=cfg.cloudUrl+'?action=restore&key='+encodeURIComponent(cfg.cloudKey)+'&callback='+callback+'&t='+Date.now();
+  const src=cfg.cloudUrl+'?action=restore&callback='+callback+'&t='+Date.now();
   document.getElementById('memoryCloudRestoreScript')?.remove();
   const script=document.createElement('script');
   script.id='memoryCloudRestoreScript';
@@ -1827,9 +1834,9 @@ function restoreFromCloud(){
   document.body.appendChild(script);
   showToast('Restoring cloud backup…');
 }
-
 document.getElementById('syncCloudBtn').addEventListener('click',()=>syncToCloud(true));
 document.getElementById('restoreCloudBtn').addEventListener('click',restoreFromCloud);
+
 /* ---------- backup ---------- */
 document.getElementById("exportBtn").addEventListener("click",()=>{
   // JSON backup includes photos because each uploaded photo is stored as a data URL in state.photos.
