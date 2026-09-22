@@ -1,0 +1,2041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f08ca0">
+<meta name="description" content="A private anniversary memory app with photos, notes, music, timeline, counters and interactive effects.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script src="app-config.js"></script>
+<title>Our Memory Box — Anniversary Edition</title>
+
+<style>
+:root{
+  --bg:#fff7f9;
+  --bg-2:#ffe9ef;
+  --surface:rgba(255,255,255,.84);
+  --surface-strong:#ffffff;
+  --text:#3f3437;
+  --muted:#806f74;
+  --accent:#e4879b;
+  --accent-2:#aa657b;
+  --accent-3:#ffd2dc;
+  --line:rgba(164,92,111,.15);
+  --shadow:0 18px 50px rgba(93,43,57,.12);
+  --radius:24px;
+  --nav-height:74px;
+  --transition:220ms ease;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  color:var(--text);
+  font-family:Georgia,"Times New Roman",serif;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(255,205,219,.9), transparent 32%),
+    radial-gradient(circle at 90% 25%, rgba(255,224,231,.95), transparent 30%),
+    linear-gradient(180deg,var(--bg),var(--bg-2));
+  min-height:100vh;
+  overflow-x:hidden;
+}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+.no-scroll{overflow:hidden}
+
+/* ---------- ambient background ---------- */
+.ambient{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.ambient span{
+  position:absolute;
+  bottom:-50px;
+  opacity:0;
+  animation:rise linear forwards;
+  filter:drop-shadow(0 8px 10px rgba(155,78,99,.12));
+}
+@keyframes rise{
+  0%{transform:translateY(0) rotate(0);opacity:0}
+  12%{opacity:.7}
+  88%{opacity:.7}
+  100%{transform:translateY(-115vh) rotate(360deg);opacity:0}
+}
+.petals span{
+  position:absolute;
+  top:-60px;
+  opacity:0;
+  animation:fall linear forwards;
+}
+@keyframes fall{
+  0%{transform:translate(0,0) rotate(0);opacity:0}
+  12%{opacity:.8}
+  50%{transform:translate(var(--drift),50vh) rotate(180deg)}
+  100%{transform:translate(calc(var(--drift)*-1),110vh) rotate(360deg);opacity:0}
+}
+
+/* ---------- lock screen ---------- */
+.lock{
+  position:fixed;inset:0;z-index:1000;
+  display:grid;place-items:center;
+  background:
+    radial-gradient(circle at 30% 20%,#ffe0e8 0,transparent 45%),
+    linear-gradient(180deg,#fff7f8,#ffe7ed);
+  padding:20px;
+  transition:opacity .45s ease,visibility .45s ease;
+}
+.lock.hide{opacity:0;visibility:hidden;pointer-events:none}
+.lock-card{
+  width:min(440px,100%);
+  background:rgba(255,255,255,.9);
+  border:1px solid rgba(255,255,255,.95);
+  box-shadow:0 30px 90px rgba(85,36,52,.17);
+  border-radius:30px;
+  padding:34px 28px;
+  text-align:center;
+  backdrop-filter:blur(14px);
+}
+.lock-badge{
+  width:72px;height:72px;border-radius:50%;
+  display:grid;place-items:center;margin:0 auto 16px;
+  background:linear-gradient(135deg,#f4a5b5,#b66d83);
+  color:#fff;font-size:32px;
+  box-shadow:0 12px 30px rgba(182,109,131,.25);
+}
+.lock h1{font-weight:normal;margin:8px 0 6px;color:var(--accent-2)}
+.lock p{color:var(--muted);line-height:1.6}
+.field-wrap{position:relative;margin:18px 0}
+.field-wrap input,.field-wrap textarea,.field-wrap select{
+  width:100%;padding:14px 15px;border:1px solid var(--line);
+  background:#fff;border-radius:16px;outline:none;color:var(--text);
+}
+.field-wrap input:focus,.field-wrap textarea:focus,.field-wrap select:focus{
+  border-color:var(--accent);box-shadow:0 0 0 4px rgba(228,135,155,.14)
+}
+.eye{position:absolute;right:8px;top:7px;border:0;background:transparent;color:var(--accent-2);padding:10px}
+.primary,.ghost,.icon-btn{
+  border:0;border-radius:16px;padding:13px 16px;
+  transition:transform var(--transition),box-shadow var(--transition),opacity var(--transition);
+}
+.primary{
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  color:#fff;box-shadow:0 10px 24px rgba(170,101,123,.22);
+}
+.ghost{background:#fff;border:1px solid var(--line);color:var(--text)}
+.icon-btn{width:42px;height:42px;padding:0;background:#fff;border:1px solid var(--line);display:grid;place-items:center}
+.primary:hover,.ghost:hover,.icon-btn:hover{transform:translateY(-2px)}
+.error{color:#b25d74!important;font-size:.9rem!important;min-height:1.2em}
+
+/* ---------- app shell ---------- */
+.app{position:relative;z-index:1}
+.topbar{
+  position:sticky;top:0;z-index:200;
+  min-height:var(--nav-height);
+  padding:10px clamp(14px,4vw,34px);
+  display:flex;align-items:center;gap:14px;justify-content:space-between;
+  background:rgba(255,248,250,.78);
+  border-bottom:1px solid rgba(150,89,106,.1);
+  backdrop-filter:blur(18px);
+}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-dot{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 0 0 6px rgba(228,135,155,.12)}
+.brand-text{font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav{
+  display:flex;gap:6px;align-items:center;justify-content:center;
+}
+.nav button{
+  border:0;background:transparent;color:var(--muted);
+  padding:10px 11px;border-radius:14px;transition:var(--transition);
+}
+.nav button.active,.nav button:hover{background:rgba(228,135,155,.12);color:var(--accent-2)}
+.top-actions{display:flex;gap:7px}
+
+main{width:min(1120px,calc(100% - 30px));margin:0 auto;padding:26px 0 90px}
+.view{display:none;animation:fadeUp .45s ease}
+.view.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+.hero{
+  text-align:center;
+  padding:44px 8px 26px;
+}
+.kicker{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:.78rem;letter-spacing:3px;text-transform:uppercase;font-weight:bold;
+  color:var(--accent-2)
+}
+.hero h1{font-size:clamp(2.2rem,6vw,4.6rem);line-height:1.06;font-weight:normal;color:var(--accent-2);margin:12px auto 9px}
+.hero .subtitle{max-width:680px;margin:0 auto;color:var(--muted);font-size:1.05rem;line-height:1.8}
+.hero-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:22px 0 0}
+
+.grid{display:grid;gap:18px}
+.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.card{
+  background:var(--surface);border:1px solid rgba(255,255,255,.85);
+  box-shadow:var(--shadow);border-radius:var(--radius);
+  padding:22px;backdrop-filter:blur(12px)
+}
+.card h2,.card h3{margin-top:0;color:var(--accent-2);font-weight:normal}
+.card p{line-height:1.75;color:var(--muted)}
+.section-title{display:flex;align-items:end;justify-content:space-between;gap:14px;margin:34px 0 14px}
+.section-title h2{margin:0;font-size:1.55rem;font-weight:normal;color:var(--accent-2)}
+.section-title span{color:var(--muted);font-size:.9rem}
+
+.stat-card{text-align:center}
+.stat-value{font-size:2rem;font-weight:bold;color:var(--accent-2)}
+.stat-label{font-size:.78rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
+
+.counter-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.counter{
+  background:rgba(255,255,255,.82);
+  border:1px solid var(--line);border-radius:18px;padding:16px;text-align:center
+}
+.counter strong{display:block;font-size:clamp(1.45rem,4vw,2.1rem);color:var(--accent-2)}
+.counter small{color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+
+.quote{
+  position:relative;
+  text-align:center;
+  padding:34px 26px;
+}
+.quote::before{content:"“";font-size:5rem;line-height:0;position:absolute;left:18px;top:40px;color:rgba(228,135,155,.18)}
+.quote-text{font-size:1.22rem;line-height:1.9;font-style:italic;position:relative}
+
+.progress{
+  height:10px;border-radius:999px;background:#f4d9e0;overflow:hidden
+}
+.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:inherit;transition:width 1s ease}
+
+/* ---------- timeline ---------- */
+.timeline{position:relative;margin-top:10px}
+.timeline::before{content:"";position:absolute;left:18px;top:0;bottom:0;width:2px;background:linear-gradient(var(--accent-3),var(--accent))}
+.timeline-item{position:relative;padding-left:52px;margin:0 0 20px}
+.timeline-dot{
+  position:absolute;left:7px;top:10px;width:24px;height:24px;border-radius:50%;
+  display:grid;place-items:center;background:#fff;border:5px solid var(--accent);box-shadow:0 5px 14px rgba(228,135,155,.2)
+}
+.timeline-card{padding:18px;border-radius:20px;background:rgba(255,255,255,.85);border:1px solid var(--line)}
+.timeline-meta{font-size:.76rem;letter-spacing:1px;text-transform:uppercase;color:var(--accent-2)}
+.timeline-card h3{margin:7px 0;color:var(--text);font-size:1.1rem}
+.timeline-card p{margin:0;color:var(--muted);line-height:1.7}
+
+/* ---------- gallery ---------- */
+.gallery-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:15px}
+.gallery-count{color:var(--muted);font-size:.9rem}
+.gallery{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:14px
+}
+.memory{
+  overflow:hidden;border-radius:20px;border:1px solid var(--line);background:#fff;cursor:pointer;
+  box-shadow:0 10px 24px rgba(65,35,43,.06);position:relative;min-height:230px;
+}
+.memory img{width:100%;height:100%;min-height:230px;object-fit:cover;display:block;transition:transform .5s ease}
+.memory:hover img{transform:scale(1.04)}
+.memory .memory-overlay{
+  position:absolute;left:0;right:0;bottom:0;padding:24px 15px 14px;
+  color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.65));
+}
+.memory .memory-title{font-size:1rem}
+.memory .memory-caption{font-size:.82rem;opacity:.9;margin-top:3px}
+.empty{
+  border:1px dashed rgba(170,101,123,.32);border-radius:20px;padding:40px 20px;text-align:center;color:var(--muted)
+}
+
+/* ---------- notes ---------- */
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}
+.note{
+  background:linear-gradient(135deg,#fff,#fff7fb);border:1px solid var(--line);
+  border-radius:20px;padding:19px;min-height:170px;position:relative;
+  box-shadow:0 12px 30px rgba(69,34,46,.05)
+}
+.note .pin{font-size:1.3rem}
+.note p{margin:13px 0 0;line-height:1.75;color:var(--text)}
+.note small{position:absolute;right:15px;top:15px;color:var(--muted)}
+.add-note{min-height:170px;border:1px dashed rgba(170,101,123,.35);background:rgba(255,255,255,.55);display:grid;place-items:center;color:var(--accent-2)}
+
+/* ---------- music ---------- */
+.music-player{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center}
+.album{
+  width:64px;height:64px;border-radius:18px;display:grid;place-items:center;
+  background:linear-gradient(145deg,#f5b1c0,#ac6b82);color:#fff;font-size:28px
+}
+.track h3{margin:0 0 4px;font-size:1.05rem}
+.track p{margin:0;font-size:.83rem}
+.track-progress{margin-top:9px;height:7px;background:#f2d9df;border-radius:999px;overflow:hidden}
+.track-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.player-controls{display:flex;gap:8px}
+
+/* ---------- settings ---------- */
+.settings-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:7px}
+textarea{min-height:110px;resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.switch{display:flex;align-items:center;gap:10px}
+.switch input{width:45px;height:24px;accent-color:var(--accent)}
+.file-input{
+  border:2px dashed rgba(170,101,123,.25);padding:20px;border-radius:18px;background:rgba(255,255,255,.45);
+}
+.footer{padding:34px 0 0;text-align:center;color:var(--muted);font-size:.85rem}
+
+/* ---------- period tracker ---------- */
+.period-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.period-stat{background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:18px;padding:16px;text-align:center}
+.period-stat strong{display:block;color:var(--accent-2);font-size:1.45rem}
+.period-stat span{display:block;color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.calendar-wrap{background:rgba(255,255,255,.58);border:1px solid var(--line);border-radius:22px;padding:16px}
+.calendar-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.calendar-title{text-align:center;flex:1;font-size:1.25rem;color:var(--accent-2)}
+.weekdays,.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.weekdays div{text-align:center;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:6px 0}
+.day{
+  min-height:74px;border:1px solid transparent;border-radius:14px;
+  background:rgba(255,255,255,.7);padding:8px;position:relative;text-align:left;
+  transition:transform var(--transition),border-color var(--transition),background var(--transition);
+}
+.day:hover{transform:translateY(-1px);border-color:rgba(228,135,155,.35)}
+.day.muted{opacity:.4}
+.day.today{box-shadow:inset 0 0 0 2px rgba(170,101,123,.42)}
+.day.period{background:linear-gradient(135deg,rgba(242,170,187,.78),rgba(224,127,151,.46));color:#5a2838}
+.day.predicted{background:linear-gradient(135deg,rgba(255,225,232,.98),rgba(250,205,218,.78));border:1px dashed rgba(170,101,123,.4)}
+.day .num{font-weight:bold;font-size:.9rem}
+.day .tag{position:absolute;right:6px;bottom:5px;font-size:.63rem;color:var(--accent-2)}
+.calendar-legend{display:flex;gap:15px;flex-wrap:wrap;margin-top:12px;color:var(--muted);font-size:.78rem}
+.legend-item{display:flex;align-items:center;gap:6px}
+.legend-dot{width:11px;height:11px;border-radius:4px;border:1px solid var(--line)}
+.legend-period{background:rgba(224,127,151,.65)}
+.legend-predicted{background:rgba(250,205,218,.82);border-style:dashed}
+.legend-today{background:#fff;box-shadow:inset 0 0 0 2px rgba(170,101,123,.42)}
+.period-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.period-form .full{grid-column:1/-1}
+.cycle-note{background:rgba(255,246,249,.9);border-left:4px solid var(--accent);padding:12px 14px;border-radius:12px;color:var(--muted);font-size:.82rem;line-height:1.65}
+.history{display:grid;gap:10px}
+.history-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;background:rgba(255,255,255,.7);border:1px solid var(--line);border-radius:16px}
+.pregnancy-card{border:1px solid rgba(183,91,116,.18);background:linear-gradient(145deg,rgba(255,248,250,.96),rgba(255,235,241,.8))}
+.pregnancy-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pregnancy-stat{padding:15px;border-radius:18px;border:1px solid var(--line);background:rgba(255,255,255,.68)}
+.pregnancy-stat strong{display:block;color:var(--accent-2);font-size:1.25rem}
+.pregnancy-stat span{display:block;color:var(--muted);font-size:.76rem;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.status-pill{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;background:rgba(228,135,155,.11);color:var(--accent-2);font-size:.78rem}
+.pregnancy-warning{background:rgba(255,248,244,.96);border-left:4px solid #c98b57;padding:13px 14px;border-radius:12px;color:#756156;font-size:.83rem;line-height:1.65}
+.pregnancy-history{display:grid;gap:10px}
+.pregnancy-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;background:rgba(255,255,255,.7);border:1px solid var(--line);border-radius:16px}
+.pregnancy-entry strong{display:block;color:var(--text)}
+.pregnancy-entry span{display:block;color:var(--muted);font-size:.8rem;margin-top:4px}
+@media (max-width:640px){
+  .pregnancy-grid{grid-template-columns:1fr}
+}
+.history-main strong{display:block;color:var(--text);font-size:.96rem}
+.history-main span{display:block;color:var(--muted);font-size:.8rem;margin-top:3px}
+@media (max-width:640px){
+  .period-summary{grid-template-columns:1fr 1fr}
+  .day{min-height:58px;padding:6px}
+  .day .tag{font-size:.54rem}
+  .period-form{grid-template-columns:1fr}
+  .period-form .full{grid-column:auto}
+}
+
+/* ---------- modal ---------- */
+.modal{
+  position:fixed;inset:0;z-index:500;display:none;place-items:center;
+  background:rgba(36,24,28,.68);padding:18px
+}
+.modal.open{display:grid}
+.modal-card{
+  width:min(920px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:26px;
+  box-shadow:0 30px 100px rgba(0,0,0,.35);padding:20px
+}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.modal-media{margin-top:12px;background:#f7edf0;border-radius:18px;overflow:hidden}
+.modal-media img{display:block;width:100%;max-height:62vh;object-fit:contain}
+.modal-copy{padding:8px 2px 0}.modal-copy h3{color:var(--accent-2);font-weight:normal}
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);
+  opacity:0;pointer-events:none;z-index:700;
+  background:#3d3134;color:#fff;padding:12px 16px;border-radius:999px;
+  box-shadow:0 12px 35px rgba(0,0,0,.22);transition:all .28s ease;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.confetti{
+  position:fixed;width:8px;height:13px;z-index:800;pointer-events:none;
+  animation:confettiFall 1.6s ease-out forwards;
+}
+@keyframes confettiFall{
+  0%{transform:translate(0,0) rotate(0);opacity:1}
+  100%{transform:translate(var(--x),var(--y)) rotate(720deg);opacity:0}
+}
+
+/* ---------- themes ---------- */
+body.dark{
+  --bg:#1f171b;--bg-2:#301f27;--surface:rgba(44,31,37,.88);--surface-strong:#2c2026;
+  --text:#f6e9ed;--muted:#c4aab2;--accent:#f09caf;--accent-2:#e1a1b1;--accent-3:#5a3945;--line:rgba(255,210,220,.13);
+  background:
+    radial-gradient(circle at 15% 5%,rgba(150,62,89,.32),transparent 32%),
+    radial-gradient(circle at 90% 25%,rgba(115,61,80,.23),transparent 30%),
+    linear-gradient(180deg,var(--bg),var(--bg-2));
+}
+body.dark .topbar{background:rgba(34,25,29,.78)}
+body.dark .ghost,body.dark .icon-btn,body.dark .counter,body.dark .note,body.dark .timeline-card{background:rgba(255,255,255,.04);color:var(--text)}
+body.dark .card,body.dark .memory{border-color:var(--line)}
+body.dark .field-wrap input,body.dark .field-wrap textarea,body.dark .field-wrap select{background:#241a1f;color:var(--text)}
+
+@media (max-width:820px){
+  .nav button{padding:9px 8px}
+  .grid-3,.notes{grid-template-columns:1fr 1fr}
+  .gallery{grid-template-columns:1fr 1fr}
+  .settings-grid{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  :root{--nav-height:auto}
+  .topbar{flex-wrap:wrap;justify-content:center}
+  .brand{width:100%;justify-content:center}
+  .nav{order:3;width:100%;overflow:auto;justify-content:flex-start;padding-bottom:2px}
+  .nav button{white-space:nowrap}
+  .top-actions{position:absolute;right:14px;top:9px}
+  main{width:min(100% - 18px,1120px)}
+  .grid-2,.grid-3,.notes,.gallery{grid-template-columns:1fr}
+  .counter-grid{grid-template-columns:repeat(2,1fr)}
+  .music-player{grid-template-columns:auto 1fr}
+  .player-controls{grid-column:1/-1;justify-content:center}
+  .hero{padding-top:28px}
+  .hero-actions .primary,.hero-actions .ghost{flex:1}
+}
+</style>
+</head>
+
+<body>
+<div class="ambient" id="ambient"></div>
+<div class="petals" id="petals"></div>
+
+<!-- ---------- private gate ---------- -->
+<section class="lock" id="lockScreen" aria-modal="true" role="dialog">
+  <div class="lock-card">
+    <div class="lock-badge">♡</div>
+    <h1>Our Memory Box</h1>
+    <p>A little private corner for the moments that matter.</p>
+
+    <div class="field-wrap">
+      <input id="gateInput" type="password" autocomplete="off" placeholder="Enter your secret key">
+      <button class="eye" type="button" id="gateEye" aria-label="Show secret">◉</button>
+    </div>
+
+    <button class="primary" id="unlockBtn">Unlock the memories</button>
+    <p class="error" id="gateError"></p>
+    <p style="font-size:.78rem">Tip: change the secret from <b>Settings</b> after opening.</p>
+  </div>
+</section>
+
+<div class="app hidden" id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span class="brand-text" id="brandText">Our Memory Box</span>
+    </div>
+
+    <nav class="nav" aria-label="Main navigation">
+      <button data-view="home" class="active">Home</button>
+      <button data-view="memories">Memories</button>
+      <button data-view="timeline">Timeline</button>
+      <button data-view="notes">Notes</button>
+      <button data-view="cycle">Period Calendar</button>
+      <button data-view="music">Music</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+
+    <div class="top-actions">
+      <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">☾</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ---------- home ---------- -->
+    <section class="view active" id="view-home">
+      <div class="hero">
+        <div class="kicker">✦ <span id="heroNames">Sudu • Doni • Princess</span> ✦</div>
+        <h1>Happy Anniversary, <span id="heroPartner">Senuni</span></h1>
+        <p class="subtitle" id="heroSubtitle">A little digital place for shared memories, favorite moments, and everything worth keeping.</p>
+        <div class="hero-actions">
+          <button class="primary" id="memoriesQuickBtn">♡ Open Memories</button>
+          <button class="ghost" id="surpriseBtn">✨ Surprise me</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title" style="margin-top:0">
+          <h2>Our time together</h2>
+          <span id="anniversaryLabel">Since our special day</span>
+        </div>
+        <div class="counter-grid">
+          <div class="counter"><strong id="cYears">00</strong><small>Years</small></div>
+          <div class="counter"><strong id="cMonths">00</strong><small>Months</small></div>
+          <div class="counter"><strong id="cDays">00</strong><small>Days</small></div>
+          <div class="counter"><strong id="cTotalDays">0</strong><small>Total days</small></div>
+        </div>
+        <div style="margin-top:17px" class="progress"><i id="yearProgress"></i></div>
+        <p id="progressText" style="margin:9px 0 0;text-align:center;font-size:.86rem">Calculating the next milestone…</p>
+      </div>
+
+      <div class="section-title">
+        <h2>Little dashboard</h2>
+        <span>Everything in one place</span>
+      </div>
+      <div class="grid grid-3">
+        <div class="card stat-card">
+          <div class="stat-value" id="statPhotos">0</div>
+          <div class="stat-label">Memories saved</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-value" id="statNotes">0</div>
+          <div class="stat-label">Little notes</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-value" id="statMoments">0</div>
+          <div class="stat-label">Timeline moments</div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <h2>Today's message</h2>
+        <span id="messageDate"></span>
+      </div>
+      <div class="card quote">
+        <div class="quote-text" id="dailyMessage">Loading a little message…</div>
+        <div style="margin-top:14px;color:var(--accent-2)" id="dailyEmoji">♡</div>
+      </div>
+
+      <div class="section-title">
+        <h2>Milestones</h2>
+        <span>Next chapter</span>
+      </div>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>Next anniversary</h3>
+          <p id="nextAnniversary"></p>
+        </div>
+        <div class="card">
+          <h3>Live clock</h3>
+          <p id="liveClock"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- memories ---------- -->
+    <section class="view" id="view-memories">
+      <div class="section-title">
+        <h2>Our Memories</h2>
+        <span id="galleryCount">0 saved</span>
+      </div>
+      <div class="card">
+        <div class="gallery-toolbar">
+          <div class="gallery-count">Photos are saved automatically in this browser. Use “Save complete website” to embed them into an HTML file.</div>
+          <div class="row">
+            <label class="ghost" style="display:inline-flex;align-items:center;gap:7px;margin:0;cursor:pointer">
+              ＋ Add photos
+              <input id="photoInput" type="file" accept="image/*" multiple hidden>
+            </label>
+            <button class="ghost" id="clearPhotosBtn">Reset sample memories</button>
+          </div>
+        </div>
+
+        <div class="gallery" id="gallery"></div>
+        <div class="empty hidden" id="galleryEmpty">
+          <div style="font-size:2rem">📷</div>
+          <p>No memories yet. Add a few photos and turn this into your own gallery.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- timeline ---------- -->
+    <section class="view" id="view-timeline">
+      <div class="section-title">
+        <h2>Our Timeline</h2>
+        <span>Important moments</span>
+      </div>
+      <div class="card">
+        <div class="timeline" id="timeline"></div>
+        <div class="row" style="margin-top:16px">
+          <button class="primary" id="addMomentBtn">＋ Add moment</button>
+          <button class="ghost" id="resetTimelineBtn">Reset timeline</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- notes ---------- -->
+    <section class="view" id="view-notes">
+      <div class="section-title">
+        <h2>Little Notes</h2>
+        <span>Small things worth remembering</span>
+      </div>
+      <div class="notes" id="notes"></div>
+    </section>
+
+    <!-- ---------- period calendar ---------- -->
+    <section class="view" id="view-cycle">
+      <div class="section-title">
+        <h2>Period Calendar</h2>
+        <span id="cycleModeLabel">Irregular-cycle tracker</span>
+      </div>
+
+      <div class="card">
+        <div class="period-summary">
+          <div class="period-stat"><strong id="cycleDayStat">—</strong><span>Current cycle day</span></div>
+          <div class="period-stat"><strong id="nextPeriodStat">—</strong><span>Next estimated period</span></div>
+          <div class="period-stat"><strong id="avgCycleStat">—</strong><span id="avgCycleLabel">Cycle range</span></div>
+          <div class="period-stat"><strong id="periodCountStat">0</strong><span>Periods logged</span></div>
+        </div>
+
+        <div class="cycle-note" style="margin-top:15px">
+          This tracker uses the dates you log. In irregular mode, future dates are shown as a broad estimate window rather than an exact prediction. This is for record-keeping only, not medical diagnosis or pregnancy prevention.
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:18px">
+        <div class="card">
+          <div class="section-title" style="margin-top:0">
+            <h2>Monthly calendar</h2>
+            <span id="selectedCycleDate">Select a day</span>
+          </div>
+          <div class="calendar-wrap">
+            <div class="calendar-head">
+              <button class="icon-btn" id="prevMonthBtn" aria-label="Previous month">‹</button>
+              <div class="calendar-title" id="calendarMonthTitle">Month</div>
+              <button class="icon-btn" id="nextMonthBtn" aria-label="Next month">›</button>
+            </div>
+            <div class="weekdays">
+              <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+            </div>
+            <div class="calendar-grid" id="periodCalendarGrid"></div>
+            <div class="calendar-legend">
+              <div class="legend-item"><i class="legend-dot legend-period"></i> Logged period</div>
+              <div class="legend-item"><i class="legend-dot legend-predicted"></i> Possible / estimated window</div>
+              <div class="legend-item"><i class="legend-dot legend-today"></i> Today</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cycle-note" style="margin-bottom:14px">
+            <b>Irregular mode:</b> the more real period starts you record, the more useful the historical range becomes.
+          </div>
+          <h3>Log a period</h3>
+          <div class="period-form">
+            <div class="field-wrap">
+              <label for="periodStart">Start date</label>
+              <input id="periodStart" type="date">
+            </div>
+            <div class="field-wrap">
+              <label for="periodEnd">End date</label>
+              <input id="periodEnd" type="date">
+            </div>
+            <div class="field-wrap full">
+              <label for="periodNote">Note (optional)</label>
+              <textarea id="periodNote" placeholder="Anything you want to remember about this cycle..."></textarea>
+            </div>
+            <div class="row full">
+              <button class="primary" id="savePeriodBtn">Save period</button>
+              <button class="ghost" id="clearPeriodFormBtn">Clear</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0">
+          <h2>Period history</h2>
+          <span>Stored on this device</span>
+        </div>
+        <div class="history" id="periodHistory"></div>
+      </div>
+
+      <div class="card pregnancy-card" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0">
+          <h2>Pregnancy possibility / test tracker</h2>
+          <span id="pregnancyStatusPill" class="status-pill">No check logged</span>
+        </div>
+
+        <div class="pregnancy-warning">
+          <b>Important:</b> a period calendar cannot reliably tell whether pregnancy is possible from dates alone,
+          especially with irregular cycles. This section is for recording a possible pregnancy concern and remembering
+          when a pregnancy test becomes useful; it is not a diagnosis.
+        </div>
+
+        <div class="pregnancy-grid" style="margin-top:14px">
+          <div class="pregnancy-stat">
+            <strong id="pregnancyTestDate">—</strong>
+            <span>Earliest useful test date</span>
+          </div>
+          <div class="pregnancy-stat">
+            <strong id="pregnancyDaysLeft">—</strong>
+            <span>Days until test date</span>
+          </div>
+          <div class="pregnancy-stat">
+            <strong id="pregnancyLastExposure">—</strong>
+            <span>Last logged concern date</span>
+          </div>
+        </div>
+
+        <div class="field-wrap" style="margin-top:16px">
+          <label for="pregnancyExposureDate">Date of possible pregnancy-causing exposure</label>
+          <input id="pregnancyExposureDate" type="date">
+        </div>
+
+        <div class="row">
+          <button class="primary" id="savePregnancyExposureBtn">Save date</button>
+          <button class="ghost" id="markPregnancyTestedBtn">Mark as tested</button>
+          <button class="ghost" id="clearPregnancyBtn">Clear tracker</button>
+        </div>
+
+        <div class="pregnancy-history" id="pregnancyHistory" style="margin-top:15px"></div>
+
+        <p style="font-size:.82rem;margin-bottom:0">
+          Home pregnancy tests are most reliable from the first day of a missed period. When the next period is uncertain,
+          NHS guidance says to test at least 21 days after the last unprotected sex. citeturn617455search0
+        </p>
+      </div>
+    </section>
+
+    <!-- ---------- music ---------- -->
+    <section class="view" id="view-music">
+      <div class="section-title">
+        <h2>Our Song</h2>
+        <span>Session music player</span>
+      </div>
+      <div class="card">
+        <div class="music-player">
+          <div class="album" id="albumEmoji">♫</div>
+          <div class="track">
+            <h3 id="songTitle">Our special song</h3>
+            <p id="songArtist">Add an audio file below</p>
+            <div class="track-progress"><i id="trackProgress"></i></div>
+          </div>
+          <div class="player-controls">
+            <button class="icon-btn" id="playBtn" title="Play/pause">▶</button>
+            <button class="icon-btn" id="muteBtn" title="Mute">🔊</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:18px">
+          <label class="ghost" style="display:inline-flex;align-items:center;gap:7px;margin:0;cursor:pointer">
+            ＋ Choose audio
+            <input id="audioInput" type="file" accept="audio/*" hidden>
+          </label>
+          <button class="ghost" id="stopAudioBtn">Stop</button>
+        </div>
+        <p style="font-size:.82rem;margin-bottom:0">Browsers block automatic audio playback in some cases, so press play when needed.</p>
+        <audio id="audio" preload="metadata"></audio>
+      </div>
+    </section>
+
+    <!-- ---------- settings ---------- -->
+    <section class="view" id="view-settings">
+      <div class="section-title">
+        <h2>Personalize</h2>
+        <span>Your settings stay on this device</span>
+      </div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">
+          <h2>☁ Private Cloud Backup</h2>
+          <span id="driveStatus">Owner backup not configured</span>
+        </div>
+        <p style="margin-top:0">
+          Your cloud backup is controlled by the app owner. This app does <strong>not</strong> ask the person using it to sign into Google or enter OAuth credentials.
+          When the owner backend is configured, the app can save and restore the memory box from the owner's Google Drive.
+        </p>
+        <div class="settings-grid" style="margin-top:12px">
+          <div>
+            <div class="stat"><strong>Owner-managed</strong><span>No Google sign-in on this device</span></div>
+            <div class="stat"><strong>Local-first</strong><span>Your memories still work offline</span></div>
+          </div>
+          <div>
+            <div class="row" style="margin-top:6px">
+              <button class="primary" id="syncCloudBtn">Sync to owner cloud</button>
+              <button class="ghost" id="restoreCloudBtn">Restore from owner cloud</button>
+            </div>
+            <p id="driveHelp" style="font-size:.8rem;margin-bottom:0">
+              The app only needs the owner backend URL that was configured before this copy was sent.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">
+          <h2>📱 Install as an App</h2>
+          <span>Works across modern phones, tablets and computers</span>
+        </div>
+        <p style="margin-top:0">Use your browser's <strong>Add to Home screen</strong> / <strong>Install app</strong> option. The app can then open like a normal app.</p>
+        <button class="primary" id="installAppBtn" style="display:none">Install Memory Box</button>
+      </div>
+      <div class="settings-grid">
+        <div class="card">
+          <h3>Names & title</h3>
+          <div class="field-wrap">
+            <label for="sPartner">Partner name</label>
+            <input id="sPartner" type="text">
+          </div>
+          <div class="field-wrap">
+            <label for="sNicknames">Nicknames line</label>
+            <input id="sNicknames" type="text">
+          </div>
+          <div class="field-wrap">
+            <label for="sSubtitle">Subtitle</label>
+            <input id="sSubtitle" type="text">
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Anniversary</h3>
+          <div class="field-wrap">
+            <label for="sDate">Start date</label>
+            <input id="sDate" type="date">
+          </div>
+          <div class="field-wrap">
+            <label for="sSongTitle">Song title</label>
+            <input id="sSongTitle" type="text">
+          </div>
+          <div class="field-wrap">
+            <label for="sSongArtist">Artist / description</label>
+            <input id="sSongArtist" type="text">
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Daily message</h3>
+          <div class="field-wrap">
+            <label for="sMessages">One message per line</label>
+            <textarea id="sMessages"></textarea>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Period calendar</h3>
+          <div class="field-wrap">
+            <label for="sCycleLength">Fallback cycle length (days)</label>
+            <input id="sCycleLength" type="number" min="15" max="60" step="1">
+          </div>
+          <div class="field-wrap">
+            <label for="sPeriodLength">Typical period length (days)</label>
+            <input id="sPeriodLength" type="number" min="1" max="14" step="1">
+          </div>
+          <div class="switch" style="margin:8px 0 10px">
+            <input id="sIrregularCycle" type="checkbox">
+            <span>Irregular cycle mode</span>
+          </div>
+          <p style="font-size:.8rem;margin-bottom:0">
+            In irregular mode, the calendar learns a <b>date range</b> from previously logged cycles instead of pretending the next period has one exact date.
+            With little history, predictions are intentionally limited.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Privacy & effects</h3>
+          <div class="switch">
+            <input id="sReducedMotion" type="checkbox">
+            <span>Reduce floating effects</span>
+          </div>
+          <div class="switch" style="margin-top:12px">
+            <input id="sAutoLock" type="checkbox">
+            <span>Lock again when this tab closes</span>
+          </div>
+          <div class="field-wrap" style="margin-top:18px">
+            <label for="sSecret">Secret key</label>
+            <input id="sSecret" type="password">
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="row">
+          <button class="primary" id="saveSettingsBtn">Save changes</button>
+          <button class="ghost" id="exportBtn">Export backup</button>
+          <button class="ghost" id="linkFileBtn">Auto-save to HTML</button>
+          <button class="ghost" id="exportWebsiteBtn">Save complete website</button>
+          <label class="ghost" style="cursor:pointer;margin:0">
+            Import backup
+            <input id="importInput" type="file" accept="application/json" hidden>
+          </label>
+          <button class="ghost" id="resetAllBtn">Reset everything</button>
+        </div>
+        <p style="margin-bottom:0;font-size:.82rem">
+          Normal changes are saved automatically in this browser. <b>Export backup</b> creates a JSON backup.
+          <b>Save complete website</b> creates a new self-contained HTML with your current photos and data embedded inside it.
+          The password is a convenience lock, not server-grade encryption.
+        </p>
+      </div>
+    </section>
+
+    <div class="footer">Made as a private little memory app • Local-first storage with owner-managed cloud backup.</div>
+  </main>
+</div>
+
+<!-- ---------- lightbox ---------- -->
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <strong id="modalIndex">Memory</strong>
+      <button class="icon-btn" id="modalClose" aria-label="Close">×</button>
+    </div>
+    <div class="modal-media"><img id="modalImage" alt=""></div>
+    <div class="modal-copy">
+      <h3 id="modalTitle"></h3>
+      <p id="modalCaption" style="color:var(--muted);line-height:1.7"></p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   ADVANCED ANNIVERSARY MEMORY APP
+   - No external libraries required
+   - Data is stored in localStorage
+   ========================================================= */
+
+const STORAGE = "advancedAnniversaryMemoryBox_v1";
+
+const DEFAULTS = {
+  partner: "Senuni",
+  nicknames: "Sudu • Doni • Princess",
+  subtitle: "A little digital place for shared memories, favorite moments, and everything worth keeping.",
+  date: "2025-09-30",
+  secret: "we kissed so much",
+  songTitle: "Our special song",
+  songArtist: "Add an audio file below",
+  reducedMotion: false,
+  autoLock: true,
+  cycle: {
+    cycleLength: 28,
+    periodLength: 5,
+    irregular: true,
+    logs: []
+  },
+  pregnancy: {
+    exposures: [],
+    tested: false
+  },
+  messages: [
+    "Some memories become more valuable every time you revisit them.",
+    "Keep the little moments. They are often the ones you remember most.",
+    "A new chapter is just another page waiting to be written.",
+    "Today is another day worth adding to the story."
+  ],
+  photos: [
+    {src:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e99aaa"/><stop offset="1" stop-color="#ad6c80"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><text x="600" y="365" text-anchor="middle" font-size="72" fill="white" font-family="Georgia">First Memory</text><text x="600" y="440" text-anchor="middle" font-size="34" fill="#ffeef2" font-family="Georgia">A place for your photo</text></svg>`), title:"First Memory", caption:"Replace this sample with one of your own photos."},
+    {src:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x1="1" y1="0" x2="0" y2="1"><stop stop-color="#cf91a1"/><stop offset="1" stop-color="#8e596a"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><text x="600" y="365" text-anchor="middle" font-size="72" fill="white" font-family="Georgia">That Trip</text><text x="600" y="440" text-anchor="middle" font-size="34" fill="#fff5f7" font-family="Georgia">Your next memory goes here</text></svg>`), title:"That Trip", caption:"Add a caption when you personalize this gallery."},
+    {src:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#efb5c1"/><stop offset="1" stop-color="#a9697d"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><text x="600" y="365" text-anchor="middle" font-size="68" fill="white" font-family="Georgia">Anniversary</text><text x="600" y="440" text-anchor="middle" font-size="34" fill="#fff7f8" font-family="Georgia">Keep the best moments here</text></svg>`), title:"Anniversary", caption:"A dedicated place for your favorite celebration."}
+  ],
+  timeline: [
+    {date:"Day one", title:"The beginning", text:"Add the date and a short description of a moment that matters."},
+    {date:"First milestone", title:"A memory worth keeping", text:"Write what happened and why you still remember it."},
+    {date:"Today", title:"Another chapter", text:"Use this entry for the latest moment you want to remember."}
+  ],
+  notes: [
+    {text:"Tiny details can turn into the memories you keep the longest.", pin:"🌷"},
+    {text:"Use these cards for inside jokes, little reminders, or favorite moments.", pin:"💌"},
+    {text:"You can add more notes whenever something becomes worth remembering.", pin:"✨"}
+  ]
+};
+
+let state = loadState();
+let currentView = "home";
+let currentModalPhoto = 0;
+let audioUrl = null;
+
+function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+function loadState(){
+  try{
+    // A self-contained exported HTML carries its own state, including embedded photos.
+    if(window.__EMBEDDED_MEMORY_BOX_STATE__){
+      const embedded = window.__EMBEDDED_MEMORY_BOX_STATE__;
+      const merged = Object.assign(clone(DEFAULTS), embedded);
+      merged.cycle = Object.assign(clone(DEFAULTS).cycle, embedded.cycle || {});
+      merged.cycle.logs = Array.isArray(embedded.cycle?.logs) ? embedded.cycle.logs : [];
+      localStorage.setItem(STORAGE, JSON.stringify(merged));
+      return merged;
+    }
+
+    const raw = localStorage.getItem(STORAGE);
+    if(!raw) return clone(DEFAULTS);
+    const saved = JSON.parse(raw);
+    const merged = Object.assign(clone(DEFAULTS), saved);
+    merged.cycle = Object.assign(clone(DEFAULTS).cycle, saved.cycle || {});
+    merged.cycle.logs = Array.isArray(saved.cycle?.logs) ? saved.cycle.logs : [];
+    return merged;
+  }catch(e){
+    return clone(DEFAULTS);
+  }
+}
+function saveState(){
+  localStorage.setItem(STORAGE, JSON.stringify(state));
+  if(memoryCloudConfigured()) {
+    clearTimeout(window.__memoryCloudTimer);
+    window.__memoryCloudTimer=setTimeout(()=>syncToCloud(false),1800);
+  }
+  if(linkedHtmlFileHandle){
+    clearTimeout(window.__linkedHtmlSaveTimer);
+    window.__linkedHtmlSaveTimer=setTimeout(()=>autoSaveLinkedHtml(),1400);
+  }
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+function showToast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg;
+  t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+/* ---------- navigation ---------- */
+function openView(view){
+  currentView=view;
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("view-"+view).classList.add("active");
+  document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+document.querySelectorAll(".nav button").forEach(btn=>{
+  btn.addEventListener("click",()=>openView(btn.dataset.view));
+});
+document.getElementById("memoriesQuickBtn").addEventListener("click",()=>openView("memories"));
+document.getElementById("surpriseBtn").addEventListener("click",surprise);
+
+/* ---------- lock ---------- */
+function unlock(){
+  const input=document.getElementById("gateInput").value.trim().toLowerCase();
+  const expected=(state.secret||DEFAULTS.secret).trim().toLowerCase();
+  if(!expected || input===expected){
+    document.getElementById("lockScreen").classList.add("hide");
+    document.getElementById("app").classList.remove("hidden");
+    sessionStorage.setItem("memoryUnlocked","1");
+    renderAll();
+  }else{
+    document.getElementById("gateError").textContent="That key doesn't match. Try again.";
+    document.getElementById("gateInput").select();
+  }
+}
+document.getElementById("unlockBtn").addEventListener("click",unlock);
+document.getElementById("gateInput").addEventListener("keydown",e=>{if(e.key==="Enter")unlock()});
+document.getElementById("gateEye").addEventListener("click",()=>{
+  const x=document.getElementById("gateInput");
+  x.type=x.type==="password"?"text":"password";
+});
+if(state.autoLock===false && sessionStorage.getItem("memoryUnlocked")==="1"){
+  document.getElementById("lockScreen").classList.add("hide");
+  document.getElementById("app").classList.remove("hidden");
+}
+
+/* ---------- theme ---------- */
+function applyTheme(){
+  const dark=localStorage.getItem("memoryTheme")==="dark";
+  document.body.classList.toggle("dark",dark);
+  document.getElementById("themeBtn").textContent=dark?"☀":"☾";
+}
+document.getElementById("themeBtn").addEventListener("click",()=>{
+  localStorage.setItem("memoryTheme",document.body.classList.contains("dark")?"light":"dark");
+  applyTheme();
+});
+applyTheme();
+
+/* ---------- counters ---------- */
+function calculateDuration(startDate){
+  const start=new Date(startDate+"T00:00:00");
+  const now=new Date();
+  let years=now.getFullYear()-start.getFullYear();
+  let months=now.getMonth()-start.getMonth();
+  let days=now.getDate()-start.getDate();
+
+  if(days<0){
+    months--;
+    const prev=new Date(now.getFullYear(),now.getMonth(),0);
+    days+=prev.getDate();
+  }
+  if(months<0){years--;months+=12}
+  const ms=Math.max(0,now-start);
+  return {years:Math.max(0,years),months:Math.max(0,months),days:Math.max(0,days),totalDays:Math.floor(ms/86400000)};
+}
+function updateCounter(){
+  const d=calculateDuration(state.date);
+  document.getElementById("cYears").textContent=String(d.years).padStart(2,"0");
+  document.getElementById("cMonths").textContent=String(d.months).padStart(2,"0");
+  document.getElementById("cDays").textContent=String(d.days).padStart(2,"0");
+  document.getElementById("cTotalDays").textContent=d.totalDays.toLocaleString();
+
+  const start=new Date(state.date+"T00:00:00");
+  const now=new Date();
+  const next=new Date(now.getFullYear(),start.getMonth(),start.getDate());
+  if(next<=now) next.setFullYear(next.getFullYear()+1);
+  const yearStart=new Date(next.getFullYear()-1,start.getMonth(),start.getDate());
+  const pct=Math.max(0,Math.min(100,((now-yearStart)/(next-yearStart))*100));
+  document.getElementById("yearProgress").style.width=pct+"%";
+  document.getElementById("progressText").textContent =
+    `${Math.ceil((next-now)/86400000).toLocaleString()} day(s) until the next anniversary`;
+
+  document.getElementById("nextAnniversary").textContent =
+    next.toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"});
+  document.getElementById("anniversaryLabel").textContent =
+    "Since "+start.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+}
+function updateClock(){
+  document.getElementById("liveClock").textContent =
+    new Date().toLocaleString(undefined,{weekday:"long",year:"numeric",month:"long",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+
+/* ---------- daily message ---------- */
+function updateDailyMessage(){
+  const list=state.messages?.length?state.messages:DEFAULTS.messages;
+  const day=Math.floor(Date.now()/86400000);
+  const msg=list[day%list.length];
+  document.getElementById("dailyMessage").textContent=msg;
+  document.getElementById("messageDate").textContent=new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"});
+  document.getElementById("dailyEmoji").textContent=["♡","✦","🌷","💌","✨"][day%5];
+}
+
+/* ---------- dashboard ---------- */
+function updateDashboard(){
+  document.getElementById("statPhotos").textContent=state.photos.length;
+  document.getElementById("statNotes").textContent=state.notes.length;
+  document.getElementById("statMoments").textContent=state.timeline.length;
+}
+
+/* ---------- gallery ---------- */
+function renderGallery(){
+  const root=document.getElementById("gallery");
+  const empty=document.getElementById("galleryEmpty");
+  document.getElementById("galleryCount").textContent=`${state.photos.length} saved`;
+  root.innerHTML="";
+  if(!state.photos.length){empty.classList.remove("hidden");return}
+  empty.classList.add("hidden");
+  state.photos.forEach((p,i)=>{
+    const card=document.createElement("article");
+    card.className="memory";
+    card.innerHTML=`
+      <img src="${p.src}" alt="${escapeHtml(p.title)}">
+      <div class="memory-overlay">
+        <div class="memory-title">${escapeHtml(p.title)}</div>
+        <div class="memory-caption">${escapeHtml(p.caption)}</div>
+      </div>`;
+    card.addEventListener("click",()=>openModal(i));
+    root.appendChild(card);
+  });
+}
+function openModal(i){
+  currentModalPhoto=i;
+  const p=state.photos[i];
+  if(!p)return;
+  document.getElementById("modalIndex").textContent=`Memory ${i+1} of ${state.photos.length}`;
+  document.getElementById("modalImage").src=p.src;
+  document.getElementById("modalImage").alt=p.title;
+  document.getElementById("modalTitle").textContent=p.title;
+  document.getElementById("modalCaption").textContent=p.caption;
+  document.getElementById("modal").classList.add("open");
+}
+document.getElementById("modalClose").addEventListener("click",()=>document.getElementById("modal").classList.remove("open"));
+document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")document.getElementById("modal").classList.remove("open")});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.getElementById("modal").classList.remove("open")});
+
+document.getElementById("photoInput").addEventListener("change",async e=>{
+  const files=[...e.target.files];
+  for(const file of files){
+    const data=await fileToDataURL(file);
+    state.photos.push({src:data,title:file.name.replace(/\.[^/.]+$/,""),caption:"Added from this device"});
+  }
+  saveState();renderGallery();updateDashboard();showToast(`${files.length} photo(s) added`);
+  e.target.value="";
+});
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(r.result);
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+}
+document.getElementById("clearPhotosBtn").addEventListener("click",()=>{
+  state.photos=clone(DEFAULTS.photos);
+  saveState();renderGallery();updateDashboard();showToast("Sample memories restored");
+});
+
+/* ---------- timeline ---------- */
+function renderTimeline(){
+  const root=document.getElementById("timeline");
+  root.innerHTML="";
+  state.timeline.forEach((m,i)=>{
+    const item=document.createElement("div");
+    item.className="timeline-item";
+    item.innerHTML=`
+      <div class="timeline-dot">♥</div>
+      <div class="timeline-card">
+        <div class="timeline-meta">${escapeHtml(m.date)}</div>
+        <h3>${escapeHtml(m.title)}</h3>
+        <p>${escapeHtml(m.text)}</p>
+        <div class="row" style="margin-top:12px">
+          <button class="ghost edit-moment" data-i="${i}">Edit</button>
+          <button class="ghost delete-moment" data-i="${i}">Delete</button>
+        </div>
+      </div>`;
+    root.appendChild(item);
+  });
+  root.querySelectorAll(".edit-moment").forEach(b=>b.addEventListener("click",()=>editMoment(Number(b.dataset.i))));
+  root.querySelectorAll(".delete-moment").forEach(b=>b.addEventListener("click",()=>deleteMoment(Number(b.dataset.i))));
+}
+function addMoment(prefill){
+  const date=prompt("Moment label/date:",prefill?.date||"Today");
+  if(date===null)return;
+  const title=prompt("Moment title:",prefill?.title||"A memory worth keeping");
+  if(title===null)return;
+  const text=prompt("What happened?",prefill?.text||"Write a short description.");
+  if(text===null)return;
+  state.timeline.push({date,title,text});
+  saveState();renderTimeline();updateDashboard();showToast("Moment added");
+}
+function editMoment(i){addMoment({...state.timeline[i],_i:i});state.timeline.splice(i,1);saveState();renderTimeline();updateDashboard()}
+function deleteMoment(i){
+  if(!confirm("Delete this timeline moment?"))return;
+  state.timeline.splice(i,1);saveState();renderTimeline();updateDashboard();showToast("Moment deleted");
+}
+document.getElementById("addMomentBtn").addEventListener("click",()=>addMoment());
+document.getElementById("resetTimelineBtn").addEventListener("click",()=>{
+  state.timeline=clone(DEFAULTS.timeline);saveState();renderTimeline();updateDashboard();showToast("Timeline reset");
+});
+
+/* ---------- notes ---------- */
+function renderNotes(){
+  const root=document.getElementById("notes");
+  root.innerHTML="";
+  state.notes.forEach((n,i)=>{
+    const el=document.createElement("article");
+    el.className="note";
+    el.innerHTML=`<small>#${i+1}</small><div class="pin">${escapeHtml(n.pin||"♡")}</div><p>${escapeHtml(n.text)}</p>`;
+    root.appendChild(el);
+  });
+  const add=document.createElement("button");
+  add.className="note add-note";
+  add.innerHTML="<span>＋ Add a little note</span>";
+  add.addEventListener("click",addNote);
+  root.appendChild(add);
+}
+function addNote(){
+  const text=prompt("Write a little note:");
+  if(!text)return;
+  const pin=prompt("Choose a symbol:", "💌")||"💌";
+  state.notes.push({text,pin});
+  saveState();renderNotes();updateDashboard();showToast("Note saved");
+}
+
+/* ---------- period calendar ---------- */
+let calendarCursor = new Date();
+calendarCursor.setDate(1);
+
+function localDateOnly(value){
+  const d = value instanceof Date ? new Date(value) : new Date(String(value)+"T00:00:00");
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function dateKey(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function parseDateKey(key){
+  return localDateOnly(key);
+}
+function addDays(date, days){
+  const d=localDateOnly(date);
+  d.setDate(d.getDate()+days);
+  return d;
+}
+function daysBetween(a,b){
+  return Math.round((localDateOnly(b)-localDateOnly(a))/86400000);
+}
+function formatShortDate(key){
+  if(!key)return "—";
+  return parseDateKey(key).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+}
+function validCycle(){
+  state.cycle = state.cycle || {cycleLength:28,periodLength:5,irregular:true,logs:[]};
+  state.cycle.cycleLength = Math.max(15,Math.min(60,Number(state.cycle.cycleLength)||28));
+  state.cycle.periodLength = Math.max(1,Math.min(14,Number(state.cycle.periodLength)||5));
+  state.cycle.irregular = state.cycle.irregular !== false;
+  state.cycle.logs = Array.isArray(state.cycle.logs)?state.cycle.logs:[];
+}
+function sortedPeriods(){
+  validCycle();
+  return [...state.cycle.logs].sort((a,b)=>a.start.localeCompare(b.start));
+}
+function averageCycleLength(){
+  const logs=sortedPeriods();
+  if(logs.length<2)return state.cycle.cycleLength;
+  const intervals=[];
+  for(let i=1;i<logs.length;i++){
+    const n=daysBetween(parseDateKey(logs[i-1].start),parseDateKey(logs[i].start));
+    if(n>=15 && n<=60) intervals.push(n);
+  }
+  if(!intervals.length)return state.cycle.cycleLength;
+  return Math.round(intervals.reduce((a,b)=>a+b,0)/intervals.length);
+}
+function observedCycleIntervals(){
+  const logs=sortedPeriods();
+  const intervals=[];
+  for(let i=1;i<logs.length;i++){
+    const n=daysBetween(parseDateKey(logs[i-1].start),parseDateKey(logs[i].start));
+    if(n>=15 && n<=90) intervals.push(n);
+  }
+  return intervals;
+}
+function cyclePredictionWindow(){
+  const latest=latestPeriodOnOrBeforeToday();
+  if(!latest)return null;
+
+  const intervals=observedCycleIntervals();
+  if(state.cycle.irregular){
+    if(intervals.length>=2){
+      const minCycle=Math.min(...intervals);
+      const maxCycle=Math.max(...intervals);
+      return {
+        start:addDays(parseDateKey(latest.start),minCycle),
+        end:addDays(parseDateKey(latest.start),maxCycle),
+        exact:false,
+        minCycle,maxCycle
+      };
+    }
+
+    if(intervals.length===1){
+      const base=intervals[0];
+      const minCycle=Math.max(15,base-4);
+      const maxCycle=Math.min(90,base+4);
+      return {
+        start:addDays(parseDateKey(latest.start),minCycle),
+        end:addDays(parseDateKey(latest.start),maxCycle),
+        exact:false,
+        minCycle,maxCycle
+      };
+    }
+
+    // With no observed history, don't invent a precise prediction.
+    return null;
+  }
+
+  const avg=averageCycleLength();
+  const exactDate=addDays(parseDateKey(latest.start),avg);
+  return {start:exactDate,end:exactDate,exact:true,minCycle:avg,maxCycle:avg};
+}
+function formatPredictionWindow(){
+  const w=cyclePredictionWindow();
+  if(!w)return null;
+  const a=formatShortDate(dateKey(w.start));
+  const b=formatShortDate(dateKey(w.end));
+  return w.exact ? a : `${a} – ${b}`;
+}
+
+function latestPeriodOnOrBeforeToday(){
+  const today=dateKey(new Date());
+  const logs=sortedPeriods().filter(x=>x.start<=today);
+  return logs.length?logs[logs.length-1]:null;
+}
+function predictedPeriodsInMonth(year,monthIndex){
+  const window=cyclePredictionWindow();
+  if(!window)return [];
+  const out=[];
+  const horizonStart=new Date(year,monthIndex,1);
+  const horizonEnd=new Date(year,monthIndex+1,0);
+
+  // In irregular mode, shade the possible start-date window rather than
+  // inventing a single cycle day. Once a possible start date is reached,
+  // use the configured typical period length for the visual estimate.
+  for(let d=new Date(window.start); d<=window.end; d=addDays(d,1)){
+    if(d>=horizonStart && d<=horizonEnd) {
+      out.push(dateKey(d));
+      for(let j=1;j<state.cycle.periodLength;j++){
+        const p=addDays(d,j);
+        if(p>=horizonStart && p<=horizonEnd) out.push(dateKey(p));
+      }
+    }
+  }
+  return [...new Set(out)];
+}
+function loggedPeriodMap(){
+  const map=new Set();
+  sortedPeriods().forEach(log=>{
+    const start=parseDateKey(log.start);
+    const end=log.end?parseDateKey(log.end):addDays(start,state.cycle.periodLength-1);
+    for(let d=start;d<=end;d=addDays(d,1))map.add(dateKey(d));
+  });
+  return map;
+}
+function predictedNextPeriod(){
+  const window=cyclePredictionWindow();
+  return window ? dateKey(window.start) : null;
+}
+function renderPeriodCalendar(){
+  validCycle();
+  const grid=document.getElementById("periodCalendarGrid");
+  const title=document.getElementById("calendarMonthTitle");
+  if(!grid)return;
+
+  const y=calendarCursor.getFullYear(), m=calendarCursor.getMonth();
+  title.textContent=calendarCursor.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+  const first=new Date(y,m,1);
+  const leading=first.getDay();
+  const last=new Date(y,m+1,0).getDate();
+  const logged=loggedPeriodMap();
+  const predicted=new Set(predictedPeriodsInMonth(y,m));
+  const todayKey=dateKey(new Date());
+
+  grid.innerHTML="";
+  for(let i=0;i<leading;i++){
+    const blank=document.createElement("div");
+    blank.className="day muted";
+    grid.appendChild(blank);
+  }
+  for(let day=1;day<=last;day++){
+    const d=new Date(y,m,day), key=dateKey(d);
+    const cell=document.createElement("button");
+    cell.type="button";
+    cell.className="day";
+    if(key===todayKey)cell.classList.add("today");
+    if(logged.has(key))cell.classList.add("period");
+    else if(predicted.has(key))cell.classList.add("predicted");
+
+    cell.innerHTML=`<span class="num">${day}</span>${
+      logged.has(key) ? '<span class="tag">logged</span>' :
+      predicted.has(key) ? `<span class="tag">${state.cycle.irregular ? "possible" : "estimate"}</span>` : ''
+    }`;
+
+    cell.addEventListener("click",()=>{
+      document.getElementById("periodStart").value=key;
+      document.getElementById("periodEnd").value="";
+      document.getElementById("selectedCycleDate").textContent=formatShortDate(key);
+    });
+    grid.appendChild(cell);
+  }
+
+  // Fill remaining cells for a tidy 6-row calendar.
+  const total=leading+last;
+  const remaining=(42-(total%42))%42;
+  for(let i=0;i<remaining;i++){
+    const blank=document.createElement("div");
+    blank.className="day muted";
+    grid.appendChild(blank);
+  }
+}
+function updatePeriodSummary(){
+  validCycle();
+  const latest=latestPeriodOnOrBeforeToday();
+  const prediction=cyclePredictionWindow();
+  const avg=averageCycleLength();
+  const intervals=observedCycleIntervals();
+
+  let cycleDay="—";
+  if(latest){
+    const diff=daysBetween(parseDateKey(latest.start),localDateOnly(new Date()));
+    cycleDay=diff>=0 ? diff+1 : "—";
+  }
+
+  document.getElementById("cycleDayStat").textContent=cycleDay;
+  document.getElementById("nextPeriodStat").textContent=prediction ? formatPredictionWindow() : "Need more history";
+
+  if(state.cycle.irregular){
+    const range=intervals.length
+      ? `${Math.min(...intervals)}–${Math.max(...intervals)}d`
+      : `${state.cycle.cycleLength}d fallback`;
+    document.getElementById("avgCycleStat").textContent=range;
+    document.getElementById("avgCycleLabel").textContent="Observed cycle range";
+  }else{
+    document.getElementById("avgCycleStat").textContent=avg+"d";
+    document.getElementById("avgCycleLabel").textContent="Average cycle length";
+  }
+
+  document.getElementById("periodCountStat").textContent=sortedPeriods().length;
+}
+function renderPeriodHistory(){
+  const root=document.getElementById("periodHistory");
+  if(!root)return;
+  root.innerHTML="";
+  const logs=sortedPeriods().reverse();
+  if(!logs.length){
+    root.innerHTML='<div class="empty"><div style="font-size:2rem">🌷</div><p>No periods logged yet. Add your first one above.</p></div>';
+    return;
+  }
+  logs.forEach(log=>{
+    const originalIndex=state.cycle.logs.indexOf(log);
+    const endText=log.end?` → ${formatShortDate(log.end)}`:"";
+    const item=document.createElement("div");
+    item.className="history-item";
+    item.innerHTML=`
+      <div class="history-main">
+        <strong>${escapeHtml(formatShortDate(log.start)+endText)}</strong>
+        <span>${escapeHtml(log.note||"No note added.")}</span>
+      </div>
+      <div class="row">
+        <button class="ghost edit-period" data-i="${originalIndex}">Edit</button>
+        <button class="ghost delete-period" data-i="${originalIndex}">Delete</button>
+      </div>`;
+    root.appendChild(item);
+  });
+  root.querySelectorAll(".edit-period").forEach(btn=>btn.addEventListener("click",()=>{
+    const i=Number(btn.dataset.i),log=state.cycle.logs[i];
+    document.getElementById("periodStart").value=log.start;
+    document.getElementById("periodEnd").value=log.end||"";
+    document.getElementById("periodNote").value=log.note||"";
+    document.getElementById("selectedCycleDate").textContent=formatShortDate(log.start);
+    openView("cycle");
+  }));
+  root.querySelectorAll(".delete-period").forEach(btn=>btn.addEventListener("click",()=>{
+    const i=Number(btn.dataset.i);
+    if(!confirm("Delete this period entry?"))return;
+    state.cycle.logs.splice(i,1);
+    saveState();renderPeriodTracker();showToast("Period entry deleted");
+  }));
+}
+function validPregnancy(){
+  state.pregnancy = state.pregnancy || {exposures:[],tested:false};
+  state.pregnancy.exposures = Array.isArray(state.pregnancy.exposures) ? state.pregnancy.exposures : [];
+  state.pregnancy.tested = !!state.pregnancy.tested;
+}
+function pregnancySorted(){
+  validPregnancy();
+  return [...state.pregnancy.exposures].sort((a,b)=>a.date.localeCompare(b.date));
+}
+function pregnancyLatest(){
+  const list=pregnancySorted();
+  return list.length ? list[list.length-1] : null;
+}
+function pregnancyTestDate(){
+  const latest=pregnancyLatest();
+  if(!latest?.date)return null;
+  return dateKey(addDays(parseDateKey(latest.date),21));
+}
+function renderPregnancyTracker(){
+  validPregnancy();
+
+  const latest=pregnancyLatest();
+  const testDate=pregnancyTestDate();
+  const status=document.getElementById("pregnancyStatusPill");
+  const testEl=document.getElementById("pregnancyTestDate");
+  const daysEl=document.getElementById("pregnancyDaysLeft");
+  const exposureEl=document.getElementById("pregnancyLastExposure");
+  const history=document.getElementById("pregnancyHistory");
+
+  if(!latest){
+    status.textContent="No check logged";
+    testEl.textContent="—";
+    daysEl.textContent="—";
+    exposureEl.textContent="—";
+  }else{
+    const days=daysBetween(localDateOnly(new Date()),parseDateKey(testDate));
+    status.textContent=state.pregnancy.tested
+      ? "Marked tested"
+      : (days>0 ? "Waiting for test date" : "Test can be taken");
+    testEl.textContent=formatShortDate(testDate);
+    daysEl.textContent=days>0 ? String(days) : "Now";
+    exposureEl.textContent=formatShortDate(latest.date);
+  }
+
+  history.innerHTML="";
+  const list=pregnancySorted().reverse();
+
+  if(!list.length){
+    history.innerHTML='<div class="empty"><div style="font-size:2rem">🧪</div><p>No possible-pregnancy dates have been logged.</p></div>';
+    return;
+  }
+
+  list.forEach(entry=>{
+    const i=state.pregnancy.exposures.indexOf(entry);
+    const calculated=dateKey(addDays(parseDateKey(entry.date),21));
+    const row=document.createElement("div");
+    row.className="pregnancy-entry";
+    row.innerHTML=`
+      <div>
+        <strong>${escapeHtml(formatShortDate(entry.date))}</strong>
+        <span>Earliest useful test date: ${escapeHtml(formatShortDate(calculated))}</span>
+      </div>
+      <div class="row">
+        <button class="ghost edit-pregnancy" data-i="${i}">Use date</button>
+        <button class="ghost delete-pregnancy" data-i="${i}">Delete</button>
+      </div>`;
+    history.appendChild(row);
+  });
+
+  history.querySelectorAll(".edit-pregnancy").forEach(btn=>btn.addEventListener("click",()=>{
+    const i=Number(btn.dataset.i);
+    document.getElementById("pregnancyExposureDate").value=state.pregnancy.exposures[i].date;
+  }));
+
+  history.querySelectorAll(".delete-pregnancy").forEach(btn=>btn.addEventListener("click",()=>{
+    const i=Number(btn.dataset.i);
+    if(!confirm("Delete this pregnancy-check entry?"))return;
+    state.pregnancy.exposures.splice(i,1);
+    if(!state.pregnancy.exposures.length) state.pregnancy.tested=false;
+    saveState();
+    renderPregnancyTracker();
+    showToast("Entry deleted");
+  }));
+}
+
+document.getElementById("savePregnancyExposureBtn").addEventListener("click",()=>{
+  validPregnancy();
+  const date=document.getElementById("pregnancyExposureDate").value;
+
+  if(!date){
+    showToast("Choose a date first");
+    return;
+  }
+  if(date>dateKey(new Date())){
+    showToast("The date cannot be in the future");
+    return;
+  }
+
+  if(!state.pregnancy.exposures.some(x=>x.date===date)){
+    state.pregnancy.exposures.push({date});
+  }
+
+  state.pregnancy.tested=false;
+  saveState();
+  renderPregnancyTracker();
+  showToast("Date saved");
+});
+
+document.getElementById("markPregnancyTestedBtn").addEventListener("click",()=>{
+  validPregnancy();
+
+  if(!pregnancyLatest()){
+    showToast("Log a date first");
+    return;
+  }
+
+  state.pregnancy.tested=true;
+  saveState();
+  renderPregnancyTracker();
+  showToast("Marked as tested");
+});
+
+document.getElementById("clearPregnancyBtn").addEventListener("click",()=>{
+  state.pregnancy={exposures:[],tested:false};
+  document.getElementById("pregnancyExposureDate").value="";
+  saveState();
+  renderPregnancyTracker();
+  showToast("Pregnancy tracker cleared");
+});
+
+function renderPeriodTracker(){
+  validCycle();
+  document.getElementById("cycleModeLabel").textContent =
+    state.cycle.irregular ? "Irregular-cycle tracker" : "Regular-cycle tracker";
+  renderPeriodCalendar();
+  updatePeriodSummary();
+  renderPeriodHistory();
+  renderPregnancyTracker();
+}
+document.getElementById("prevMonthBtn").addEventListener("click",()=>{
+  calendarCursor.setMonth(calendarCursor.getMonth()-1);renderPeriodCalendar();
+});
+document.getElementById("nextMonthBtn").addEventListener("click",()=>{
+  calendarCursor.setMonth(calendarCursor.getMonth()+1);renderPeriodCalendar();
+});
+document.getElementById("clearPeriodFormBtn").addEventListener("click",()=>{
+  document.getElementById("periodStart").value="";
+  document.getElementById("periodEnd").value="";
+  document.getElementById("periodNote").value="";
+  document.getElementById("selectedCycleDate").textContent="Select a day";
+});
+document.getElementById("savePeriodBtn").addEventListener("click",()=>{
+  validCycle();
+  const start=document.getElementById("periodStart").value;
+  const end=document.getElementById("periodEnd").value;
+  const note=document.getElementById("periodNote").value.trim();
+  if(!start){showToast("Choose a start date first");return}
+  if(end && end<start){showToast("End date must be after the start date");return}
+  const existingIndex=state.cycle.logs.findIndex(x=>x.start===start);
+  const record={start,end:end||"",note};
+  if(existingIndex>=0)state.cycle.logs[existingIndex]=record;
+  else state.cycle.logs.push(record);
+  saveState();renderPeriodTracker();updateDashboard();
+  document.getElementById("selectedCycleDate").textContent=formatShortDate(start);
+  showToast(existingIndex>=0?"Period updated":"Period saved");
+});
+document.getElementById("periodStart").addEventListener("change",e=>{
+  document.getElementById("selectedCycleDate").textContent=e.target.value?formatShortDate(e.target.value):"Select a day";
+});
+
+/* ---------- music ---------- */
+const audio=document.getElementById("audio");
+document.getElementById("playBtn").addEventListener("click",()=>{
+  if(!audio.src){showToast("Choose an audio file first");return}
+  if(audio.paused) audio.play(); else audio.pause();
+});
+document.getElementById("muteBtn").addEventListener("click",()=>{
+  audio.muted=!audio.muted;
+  document.getElementById("muteBtn").textContent=audio.muted?"🔇":"🔊";
+});
+document.getElementById("stopAudioBtn").addEventListener("click",()=>{
+  audio.pause();audio.currentTime=0;document.getElementById("trackProgress").style.width="0%";document.getElementById("playBtn").textContent="▶";
+});
+document.getElementById("audioInput").addEventListener("change",e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  if(audioUrl)URL.revokeObjectURL(audioUrl);
+  audioUrl=URL.createObjectURL(file);
+  audio.src=audioUrl;
+  document.getElementById("songArtist").textContent=file.name;
+  document.getElementById("songTitle").textContent=state.songTitle||file.name;
+  showToast("Audio loaded for this session");
+});
+audio.addEventListener("play",()=>document.getElementById("playBtn").textContent="⏸");
+audio.addEventListener("pause",()=>document.getElementById("playBtn").textContent="▶");
+audio.addEventListener("timeupdate",()=>{
+  const pct=audio.duration?audio.currentTime/audio.duration*100:0;
+  document.getElementById("trackProgress").style.width=pct+"%";
+});
+
+/* ---------- settings ---------- */
+function fillSettings(){
+  document.getElementById("sPartner").value=state.partner;
+  document.getElementById("sNicknames").value=state.nicknames;
+  document.getElementById("sSubtitle").value=state.subtitle;
+  document.getElementById("sDate").value=state.date;
+  document.getElementById("sSongTitle").value=state.songTitle;
+  document.getElementById("sSongArtist").value=state.songArtist;
+  document.getElementById("sMessages").value=(state.messages||[]).join("\n");
+  document.getElementById("sSecret").value=state.secret;
+  document.getElementById("sCycleLength").value=state.cycle?.cycleLength || 28;
+  document.getElementById("sPeriodLength").value=state.cycle?.periodLength || 5;
+  document.getElementById("sReducedMotion").checked=!!state.reducedMotion;
+  document.getElementById("sAutoLock").checked=!!state.autoLock;
+}
+function saveSettingsFromUI(){
+  state.partner=document.getElementById("sPartner").value.trim()||DEFAULTS.partner;
+  state.nicknames=document.getElementById("sNicknames").value.trim()||DEFAULTS.nicknames;
+  state.subtitle=document.getElementById("sSubtitle").value.trim()||DEFAULTS.subtitle;
+  state.date=document.getElementById("sDate").value||DEFAULTS.date;
+  state.songTitle=document.getElementById("sSongTitle").value.trim()||DEFAULTS.songTitle;
+  state.songArtist=document.getElementById("sSongArtist").value.trim()||DEFAULTS.songArtist;
+  state.messages=document.getElementById("sMessages").value.split("\n").map(x=>x.trim()).filter(Boolean);
+  if(!state.messages.length)state.messages=clone(DEFAULTS.messages);
+  state.secret=document.getElementById("sSecret").value.trim()||DEFAULTS.secret;
+  state.reducedMotion=document.getElementById("sReducedMotion").checked;
+  state.autoLock=document.getElementById("sAutoLock").checked;
+  state.cycle=state.cycle||clone(DEFAULTS.cycle);
+  state.cycle.cycleLength=Math.max(15,Math.min(60,Number(document.getElementById("sCycleLength").value)||28));
+  state.cycle.periodLength=Math.max(1,Math.min(14,Number(document.getElementById("sPeriodLength").value)||5));
+  saveState();
+  if(state.reducedMotion){document.getElementById("ambient").innerHTML="";document.getElementById("petals").innerHTML=""}
+  else startAmbient();
+  renderAll();showToast("Settings saved");
+}
+document.getElementById("saveSettingsBtn").addEventListener("click",saveSettingsFromUI);
+
+/* ---------- Owner-managed cloud backup ---------- */
+let cloudSyncBusy=false;
+
+function memoryCloudConfigured(){
+  return !!(window.MEMORY_BOX_CONFIG?.cloudUrl &&
+    !String(window.MEMORY_BOX_CONFIG.cloudUrl).includes('PASTE_YOUR_') &&
+    window.MEMORY_BOX_CONFIG?.cloudKey &&
+    !String(window.MEMORY_BOX_CONFIG.cloudKey).includes('PASTE_'));
+}
+function updateDriveUI(){
+  const configured=memoryCloudConfigured();
+  document.getElementById('driveStatus').textContent=configured?'Owner cloud configured ✓':'Owner backup not configured';
+  document.getElementById('syncCloudBtn').disabled=!configured;
+  document.getElementById('restoreCloudBtn').disabled=!configured;
+  const help=document.getElementById('driveHelp');
+  if(configured){
+    help.textContent='Cloud backup is owner-managed. No Google account or OAuth screen is shown to the person using this app.';
+  }else{
+    help.textContent='The owner must finish the one-time backend setup before sending this app to another device.';
+  }
+}
+function cloudJson(){
+  return JSON.stringify({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    state: state
+  });
+}
+function syncToCloud(manual=true){
+  if(!memoryCloudConfigured()){
+    if(manual)showToast('Owner cloud is not configured yet');
+    return;
+  }
+  if(cloudSyncBusy)return;
+  cloudSyncBusy=true;
+  const cfg=window.MEMORY_BOX_CONFIG;
+  try{
+    // A native form POST avoids browser CORS preflight and works with a Google Apps Script web app.
+    let iframe=document.getElementById('memoryCloudFrame');
+    if(!iframe){
+      iframe=document.createElement('iframe');
+      iframe.id='memoryCloudFrame';
+      iframe.name='memoryCloudFrame';
+      iframe.style.display='none';
+      document.body.appendChild(iframe);
+    }
+    const form=document.createElement('form');
+    form.method='POST';
+    form.action=cfg.cloudUrl;
+    form.target='memoryCloudFrame';
+    form.style.display='none';
+    const fields={action:'save',key:cfg.cloudKey,payload:cloudJson()};
+    Object.entries(fields).forEach(([name,value])=>{
+      const input=document.createElement('input');
+      input.type='hidden';
+      input.name=name;
+      input.value=value;
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(()=>{form.remove();cloudSyncBusy=false;},2200);
+    if(manual)showToast('Cloud backup sent');
+  }catch(err){
+    console.error(err);
+    cloudSyncBusy=false;
+    if(manual)showToast('Cloud backup failed');
+  }
+}
+window.memoryBoxRestoreCallback=function(packet){
+  try{
+    if(!packet?.ok)throw new Error(packet?.error||'Cloud restore failed');
+    const imported=JSON.parse(packet.payload);
+    const incoming=imported?.state || imported;
+    if(!incoming || typeof incoming!=='object')throw new Error('Backup was empty');
+    state=Object.assign(clone(DEFAULTS),incoming);
+    state.cycle=Object.assign(clone(DEFAULTS).cycle,incoming.cycle||{});
+    state.cycle.logs=Array.isArray(incoming.cycle?.logs)?incoming.cycle.logs:[];
+    state.pregnancy=Object.assign(clone(DEFAULTS).pregnancy||{exposures:[],tested:false},incoming.pregnancy||{});
+    state.pregnancy.exposures=Array.isArray(incoming.pregnancy?.exposures)?incoming.pregnancy.exposures:[];
+    saveState();
+    renderAll();
+    showToast('Cloud backup restored');
+  }catch(err){
+    console.error(err);
+    showToast('Could not restore the cloud backup');
+  }finally{
+    document.getElementById('memoryCloudRestoreScript')?.remove();
+  }
+};
+function restoreFromCloud(){
+  if(!memoryCloudConfigured()){showToast('Owner cloud is not configured yet');return;}
+  const cfg=window.MEMORY_BOX_CONFIG;
+  const callback='memoryBoxRestoreCallback';
+  const src=cfg.cloudUrl+'?action=restore&key='+encodeURIComponent(cfg.cloudKey)+'&callback='+callback+'&t='+Date.now();
+  document.getElementById('memoryCloudRestoreScript')?.remove();
+  const script=document.createElement('script');
+  script.id='memoryCloudRestoreScript';
+  script.src=src;
+  script.onerror=()=>{script.remove();showToast('Could not reach the cloud backup');};
+  document.body.appendChild(script);
+  showToast('Restoring cloud backup…');
+}
+
+document.getElementById('syncCloudBtn').addEventListener('click',()=>syncToCloud(true));
+document.getElementById('restoreCloudBtn').addEventListener('click',restoreFromCloud);
+/* ---------- backup ---------- */
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  // JSON backup includes photos because each uploaded photo is stored as a data URL in state.photos.
+  saveState();
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="memory-box-backup.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast("Complete JSON backup exported");
+});
+
+function makeSelfContainedWebsite(){
+  // Do not call saveState() here; this function is also called from saveState's file-sync timer.
+  const stateJson = JSON.stringify(state)
+    .replace(/</g,"\\u003c")
+    .replace(/>/g,"\\u003e")
+    .replace(/&/g,"\\u0026");
+
+  let bundled=document.documentElement.outerHTML;
+  const markerStart="<!-- MEMORY_BOX_STATE_START -->";
+  const markerEnd="<!-- MEMORY_BOX_STATE_END -->";
+  const oldBlock=new RegExp(
+    markerStart.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&")+"[\\\\s\\\\S]*?"+
+    markerEnd.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&"),"g"
+  );
+  bundled=bundled.replace(oldBlock,"");
+
+  const injected=markerStart+
+    '<script id="embedded-state">window.__EMBEDDED_MEMORY_BOX_STATE__='+
+    stateJson+
+    ';<'+'/script>'+
+    markerEnd;
+
+  bundled=bundled.replace("</head>",injected+"</head>");
+  return "<!DOCTYPE html>\\n"+bundled;
+}
+
+document.getElementById("exportWebsiteBtn").addEventListener("click",()=>{
+  const html = makeSelfContainedWebsite();
+  const blob = new Blob([html],{type:"text/html;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "anniversary-memory-box.html";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast("Complete website saved with your photos");
+});
+document.getElementById("importInput").addEventListener("change",async e=>{
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const imported=JSON.parse(await file.text());
+    state=Object.assign(clone(DEFAULTS),imported);
+    saveState();renderAll();showToast("Backup imported");
+  }catch(err){showToast("That backup file is not valid")}
+  e.target.value="";
+});
+let linkedHtmlFileHandle=null;
+async function autoSaveLinkedHtml(){
+  if(!linkedHtmlFileHandle)return;
+  try{
+    const perm=await linkedHtmlFileHandle.queryPermission({mode:"readwrite"});
+    if(perm!=="granted"){
+      const req=await linkedHtmlFileHandle.requestPermission({mode:"readwrite"});
+      if(req!=="granted")return;
+    }
+    const writable=await linkedHtmlFileHandle.createWritable();
+    await writable.write(makeSelfContainedWebsite());
+    await writable.close();
+  }catch(err){
+    console.warn("Linked HTML autosave failed",err);
+  }
+}
+const linkFileButton=document.getElementById("linkFileBtn");
+if(linkFileButton){
+  linkFileButton.addEventListener("click",async()=>{
+    if(!window.showOpenFilePicker){
+      showToast("Auto-save to an existing HTML needs Chrome or Edge");
+      return;
+    }
+    try{
+      const [handle]=await window.showOpenFilePicker({
+        multiple:false,
+        types:[{description:"HTML website",accept:{"text/html":[".html",".htm"]}}]
+      });
+      linkedHtmlFileHandle=handle;
+      await autoSaveLinkedHtml();
+      showToast("HTML file linked for auto-save");
+    }catch(err){
+      if(err?.name!=="AbortError")showToast("Could not link that HTML file");
+    }
+  });
+}
+document.getElementById("resetAllBtn").addEventListener("click",()=>{
+  if(!confirm("Reset all saved data on this browser?"))return;
+  state=clone(DEFAULTS);saveState();renderAll();showToast("Everything reset");
+});
+
+/* ---------- surprise ---------- */
+const surprises=[
+  "Open Memories and choose one photo you almost forgot about.",
+  "Add a timeline entry for something small that made you smile.",
+  "Write a note that future-you will enjoy finding later.",
+  "Pick a favorite song and load it into the music player.",
+  "Try dark mode for a different atmosphere."
+];
+function surprise(){
+  const msg=surprises[Math.floor(Math.random()*surprises.length)];
+  showToast(msg);burst();
+}
+function burst(){
+  for(let i=0;i<28;i++){
+    const s=document.createElement("span");
+    s.className="confetti";
+    s.textContent=["♥","✦","•","♡"][i%4];
+    s.style.left=(45+Math.random()*10)+"%";
+    s.style.top="28%";
+    s.style.setProperty("--x",((Math.random()-.5)*360)+"px");
+    s.style.setProperty("--y",(120+Math.random()*300)+"px");
+    s.style.fontSize=(10+Math.random()*15)+"px";
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),1700);
+  }
+}
+
+/* ---------- ambient effects ---------- */
+function startAmbient(){
+  if(state.reducedMotion)return;
+  const a=document.getElementById("ambient");
+  const p=document.getElementById("petals");
+  if(a.dataset.running==="1")return;
+  a.dataset.running="1";
+  const hearts=["♡","♥","💕","✦"];
+  const petals=["🌸","🌹","✿"];
+  setInterval(()=>{
+    if(state.reducedMotion)return;
+    const x=document.createElement("span");
+    x.textContent=hearts[Math.floor(Math.random()*hearts.length)];
+    x.style.left=Math.random()*100+"%";
+    x.style.fontSize=(15+Math.random()*18)+"px";
+    x.style.animationDuration=(5+Math.random()*5)+"s";
+    a.appendChild(x);setTimeout(()=>x.remove(),11000);
+  },700);
+  setInterval(()=>{
+    if(state.reducedMotion)return;
+    const x=document.createElement("span");
+    x.textContent=petals[Math.floor(Math.random()*petals.length)];
+    x.style.left=Math.random()*100+"%";
+    x.style.setProperty("--drift",(Math.random()*120-60)+"px");
+    x.style.fontSize=(14+Math.random()*15)+"px";
+    x.style.animationDuration=(7+Math.random()*5)+"s";
+    p.appendChild(x);setTimeout(()=>x.remove(),13000);
+  },1000);
+}
+
+/* ---------- render all ---------- */
+function renderAll(){
+  document.getElementById("heroPartner").textContent=state.partner;
+  document.getElementById("heroNames").textContent=state.nicknames;
+  document.getElementById("heroSubtitle").textContent=state.subtitle;
+  document.getElementById("brandText").textContent=`Memory Box · ${state.partner}`;
+  document.getElementById("songTitle").textContent=state.songTitle;
+  document.getElementById("songArtist").textContent=state.songArtist;
+  updateCounter();updateClock();updateDailyMessage();updateDashboard();
+  renderGallery();renderTimeline();renderNotes();renderPeriodTracker();fillSettings();updateDriveUI();
+}
+
+window.addEventListener("DOMContentLoaded",()=>{
+  startAmbient();
+  if(!document.getElementById("app").classList.contains("hidden"))renderAll();
+  setInterval(updateCounter,60*60*1000);
+  setInterval(updateClock,1000);
+  updateClock();
+});
+
+
+/* ---------- PWA install ---------- */
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  const btn=document.getElementById('installAppBtn');
+  if(btn)btn.style.display='inline-flex';
+});
+document.getElementById('installAppBtn')?.addEventListener('click',async()=>{
+  if(!deferredInstallPrompt){showToast('Use your browser menu to install this app');return;}
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;
+  const btn=document.getElementById('installAppBtn');
+  if(btn)btn.style.display='none';
+});
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('PWA service worker:',err)));
+}
+
+window.addEventListener("beforeunload",()=>{
+  if(state.autoLock)sessionStorage.removeItem("memoryUnlocked");
+});
+</script>
+</body>
+</html>
