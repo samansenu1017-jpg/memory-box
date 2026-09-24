@@ -238,6 +238,25 @@ main{width:min(1120px,calc(100% - 30px));margin:0 auto;padding:26px 0 90px}
 }
 .memory .memory-title{font-size:1rem}
 .memory .memory-caption{font-size:.82rem;opacity:.9;margin-top:3px}
+.memory-actions{
+  display:flex;gap:8px;margin-top:10px;position:relative;z-index:2
+}
+.memory-edit-btn{
+  border:1px solid rgba(255,255,255,.48);background:rgba(255,255,255,.18);
+  color:#fff;border-radius:999px;padding:7px 11px;font-size:.78rem;
+  backdrop-filter:blur(8px)
+}
+.memory-edit-btn:hover{background:rgba(255,255,255,.3);transform:translateY(-1px)}
+.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.editor-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:16px}
+.danger-btn{
+  border:1px solid rgba(170,82,107,.24);background:#fff1f4;color:#9d4962;
+  border-radius:999px;padding:10px 14px
+}
+.editor-help{font-size:.8rem;color:var(--muted);margin:8px 0 0}
+@media (max-width:640px){
+  .editor-grid{grid-template-columns:1fr}
+}
 .empty{
   border:1px dashed rgba(170,101,123,.32);border-radius:20px;padding:40px 20px;text-align:center;color:var(--muted)
 }
@@ -528,12 +547,13 @@ body.dark .field-wrap input,body.dark .field-wrap textarea,body.dark .field-wrap
       </div>
       <div class="card">
         <div class="gallery-toolbar">
-          <div class="gallery-count">Photos are saved automatically in this browser. Use “Save complete website” to embed them into an HTML file.</div>
+          <div class="gallery-count">Edit the existing memory cards, replace their photos, or add new memories. Changes save automatically on this device.</div>
           <div class="row">
             <label class="ghost" style="display:inline-flex;align-items:center;gap:7px;margin:0;cursor:pointer">
               ＋ Add photos
               <input id="photoInput" type="file" accept="image/*" multiple hidden>
             </label>
+            <button class="ghost" id="addMemoryBtn">＋ New memory</button>
             <button class="ghost" id="clearPhotosBtn">Reset sample memories</button>
           </div>
         </div>
@@ -541,7 +561,7 @@ body.dark .field-wrap input,body.dark .field-wrap textarea,body.dark .field-wrap
         <div class="gallery" id="gallery"></div>
         <div class="empty hidden" id="galleryEmpty">
           <div style="font-size:2rem">📷</div>
-          <p>No memories yet. Add a few photos and turn this into your own gallery.</p>
+          <p>No memories yet. Click <b>＋ New memory</b> or <b>＋ Add photos</b> to start your gallery.</p>
         </div>
       </div>
     </section>
@@ -868,17 +888,41 @@ body.dark .field-wrap input,body.dark .field-wrap textarea,body.dark .field-wrap
   </main>
 </div>
 
-<!-- ---------- lightbox ---------- -->
+<!-- ---------- memory editor ---------- -->
 <div class="modal" id="modal">
   <div class="modal-card">
     <div class="modal-head">
-      <strong id="modalIndex">Memory</strong>
+      <strong id="modalIndex">Edit memory</strong>
       <button class="icon-btn" id="modalClose" aria-label="Close">×</button>
     </div>
-    <div class="modal-media"><img id="modalImage" alt=""></div>
-    <div class="modal-copy">
-      <h3 id="modalTitle"></h3>
-      <p id="modalCaption" style="color:var(--muted);line-height:1.7"></p>
+
+    <div class="modal-media">
+      <img id="modalImage" alt="">
+    </div>
+
+    <div class="editor-grid">
+      <div class="field-wrap">
+        <label for="editMemoryTitle">Memory title</label>
+        <input id="editMemoryTitle" type="text" maxlength="120" placeholder="e.g. Our first date">
+      </div>
+
+      <div class="field-wrap">
+        <label for="editMemoryCaption">Caption</label>
+        <input id="editMemoryCaption" type="text" maxlength="240" placeholder="Write something about this memory">
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="replaceMemoryPhotoBtn">📷 Replace photo</button>
+      <input id="editPhotoInput" type="file" accept="image/*" hidden>
+    </div>
+
+    <p class="editor-help">You can edit the title and caption, or replace the photo. Your changes are saved with the memory box.</p>
+
+    <div class="editor-actions">
+      <button class="danger-btn" id="deleteMemoryBtn">🗑 Delete memory</button>
+      <button class="ghost" id="cancelEditBtn">Cancel</button>
+      <button class="primary" id="saveMemoryEditBtn">Save changes</button>
     </div>
   </div>
 </div>
@@ -1101,6 +1145,20 @@ function updateDashboard(){
 }
 
 /* ---------- gallery ---------- */
+function makePlaceholderSvg(title="New Memory", subtitle="Choose a photo to replace this placeholder"){
+  const safeTitle=String(title).replace(/[<&>"]/g,"");
+  const safeSubtitle=String(subtitle).replace(/[<&>"]/g,"");
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#efb5c1"/><stop offset="1" stop-color="#a9697d"/>
+    </linearGradient></defs>
+    <rect width="1200" height="800" fill="url(#g)"/>
+    <text x="600" y="365" text-anchor="middle" font-size="70" fill="white" font-family="Georgia">${safeTitle}</text>
+    <text x="600" y="440" text-anchor="middle" font-size="30" fill="#fff7f8" font-family="Georgia">${safeSubtitle}</text>
+  </svg>`;
+  return "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg);
+}
+
 function renderGallery(){
   const root=document.getElementById("gallery");
   const empty=document.getElementById("galleryEmpty");
@@ -1108,6 +1166,7 @@ function renderGallery(){
   root.innerHTML="";
   if(!state.photos.length){empty.classList.remove("hidden");return}
   empty.classList.add("hidden");
+
   state.photos.forEach((p,i)=>{
     const card=document.createElement("article");
     card.className="memory";
@@ -1116,35 +1175,140 @@ function renderGallery(){
       <div class="memory-overlay">
         <div class="memory-title">${escapeHtml(p.title)}</div>
         <div class="memory-caption">${escapeHtml(p.caption)}</div>
+        <div class="memory-actions">
+          <button class="memory-edit-btn" type="button" data-edit="${i}">✎ Edit memory</button>
+        </div>
       </div>`;
+
     card.addEventListener("click",()=>openModal(i));
+    card.querySelector("[data-edit]").addEventListener("click",e=>{
+      e.stopPropagation();
+      openModal(i);
+    });
     root.appendChild(card);
   });
 }
-function openModal(i){
-  currentModalPhoto=i;
+
+function populateMemoryEditor(i){
   const p=state.photos[i];
   if(!p)return;
-  document.getElementById("modalIndex").textContent=`Memory ${i+1} of ${state.photos.length}`;
+  currentModalPhoto=i;
+  document.getElementById("modalIndex").textContent=`Edit memory ${i+1} of ${state.photos.length}`;
   document.getElementById("modalImage").src=p.src;
-  document.getElementById("modalImage").alt=p.title;
-  document.getElementById("modalTitle").textContent=p.title;
-  document.getElementById("modalCaption").textContent=p.caption;
-  document.getElementById("modal").classList.add("open");
+  document.getElementById("modalImage").alt=p.title || "Memory";
+  document.getElementById("editMemoryTitle").value=p.title || "";
+  document.getElementById("editMemoryCaption").value=p.caption || "";
 }
-document.getElementById("modalClose").addEventListener("click",()=>document.getElementById("modal").classList.remove("open"));
-document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")document.getElementById("modal").classList.remove("open")});
-document.addEventListener("keydown",e=>{if(e.key==="Escape")document.getElementById("modal").classList.remove("open")});
+
+function openModal(i){
+  if(!state.photos[i])return;
+  populateMemoryEditor(i);
+  document.getElementById("modal").classList.add("open");
+  setTimeout(()=>document.getElementById("editMemoryTitle").focus(),30);
+}
+
+function closeMemoryEditor(){
+  document.getElementById("modal").classList.remove("open");
+}
+
+document.getElementById("modalClose").addEventListener("click",closeMemoryEditor);
+document.getElementById("cancelEditBtn").addEventListener("click",closeMemoryEditor);
+document.getElementById("modal").addEventListener("click",e=>{
+  if(e.target.id==="modal")closeMemoryEditor();
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape")closeMemoryEditor();
+});
+
+document.getElementById("replaceMemoryPhotoBtn").addEventListener("click",()=>{
+  document.getElementById("editPhotoInput").click();
+});
+
+document.getElementById("editPhotoInput").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];
+  if(!file || !state.photos[currentModalPhoto])return;
+  try{
+    const data=await fileToDataURL(file);
+    state.photos[currentModalPhoto].src=data;
+    document.getElementById("modalImage").src=data;
+    showToast("Photo replaced — click Save changes");
+  }catch(err){
+    console.error(err);
+    showToast("Could not read that photo");
+  }finally{
+    e.target.value="";
+  }
+});
+
+document.getElementById("saveMemoryEditBtn").addEventListener("click",()=>{
+  const p=state.photos[currentModalPhoto];
+  if(!p)return;
+
+  const title=document.getElementById("editMemoryTitle").value.trim();
+  const caption=document.getElementById("editMemoryCaption").value.trim();
+
+  p.title=title || "Untitled memory";
+  p.caption=caption || "A memory worth keeping.";
+
+  saveState();
+  renderGallery();
+  updateDashboard();
+  closeMemoryEditor();
+  showToast("Memory saved");
+});
+
+document.getElementById("deleteMemoryBtn").addEventListener("click",()=>{
+  const p=state.photos[currentModalPhoto];
+  if(!p)return;
+  const label=p.title || `Memory ${currentModalPhoto+1}`;
+  if(!confirm(`Delete "${label}" from the Memory Box?`))return;
+
+  state.photos.splice(currentModalPhoto,1);
+  saveState();
+  renderGallery();
+  updateDashboard();
+  closeMemoryEditor();
+  showToast("Memory deleted");
+});
 
 document.getElementById("photoInput").addEventListener("change",async e=>{
   const files=[...e.target.files];
+  let firstAddedIndex=-1;
+
   for(const file of files){
     const data=await fileToDataURL(file);
-    state.photos.push({src:data,title:file.name.replace(/\.[^/.]+$/,""),caption:"Added from this device"});
+    const idx=state.photos.length;
+    state.photos.push({
+      src:data,
+      title:file.name.replace(/\.[^/.]+$/,"") || "New Memory",
+      caption:"Added from this device"
+    });
+    if(firstAddedIndex<0)firstAddedIndex=idx;
   }
-  saveState();renderGallery();updateDashboard();showToast(`${files.length} photo(s) added`);
+
+  if(files.length){
+    saveState();
+    renderGallery();
+    updateDashboard();
+    showToast(`${files.length} photo(s) added`);
+    if(firstAddedIndex>=0)openModal(firstAddedIndex);
+  }
   e.target.value="";
 });
+
+document.getElementById("addMemoryBtn").addEventListener("click",()=>{
+  const idx=state.photos.length;
+  state.photos.push({
+    src:makePlaceholderSvg(),
+    title:"New Memory",
+    caption:"Choose a photo, title and caption for this memory."
+  });
+  saveState();
+  renderGallery();
+  updateDashboard();
+  openModal(idx);
+});
+
 function fileToDataURL(file){
   return new Promise((resolve,reject)=>{
     const r=new FileReader();
@@ -1725,33 +1889,25 @@ function saveSettingsFromUI(){
 document.getElementById("saveSettingsBtn").addEventListener("click",saveSettingsFromUI);
 
 /* ---------- Owner-managed cloud backup ---------- */
-/*
-  IMPORTANT:
-  A static browser app cannot safely hide a secret. Anything shipped to
-  GitHub Pages can be inspected by visitors. This build therefore contains
-  no OWNER_KEY/cloudKey.
-
-  The direct cloud buttons remain available only when the backend URL is
-  configured. The backend itself must enforce authorization if the backup
-  contains private data.
-*/
 let cloudSyncBusy=false;
 
 function memoryCloudConfigured(){
   return !!(window.MEMORY_BOX_CONFIG?.cloudUrl &&
-    !String(window.MEMORY_BOX_CONFIG.cloudUrl).includes('PASTE_YOUR_'));
+    !String(window.MEMORY_BOX_CONFIG.cloudUrl).includes('PASTE_YOUR_') &&
+    window.MEMORY_BOX_CONFIG?.cloudKey &&
+    !String(window.MEMORY_BOX_CONFIG.cloudKey).includes('PASTE_'));
 }
 function updateDriveUI(){
   const configured=memoryCloudConfigured();
-  document.getElementById('driveStatus').textContent=configured
-    ? 'Cloud endpoint configured'
-    : 'Owner cloud not configured';
+  document.getElementById('driveStatus').textContent=configured?'Owner cloud configured ✓':'Owner backup not configured';
   document.getElementById('syncCloudBtn').disabled=!configured;
   document.getElementById('restoreCloudBtn').disabled=!configured;
   const help=document.getElementById('driveHelp');
-  help.textContent=configured
-    ? 'This public app contains no owner cloud key. The backend must provide its own authorization.'
-    : 'Configure the owner backend URL before using cloud backup.';
+  if(configured){
+    help.textContent='Cloud backup is owner-managed. No Google account or OAuth screen is shown to the person using this app.';
+  }else{
+    help.textContent='The owner must finish the one-time backend setup before sending this app to another device.';
+  }
 }
 function cloudJson(){
   return JSON.stringify({
@@ -1769,6 +1925,7 @@ function syncToCloud(manual=true){
   cloudSyncBusy=true;
   const cfg=window.MEMORY_BOX_CONFIG;
   try{
+    // A native form POST avoids browser CORS preflight and works with a Google Apps Script web app.
     let iframe=document.getElementById('memoryCloudFrame');
     if(!iframe){
       iframe=document.createElement('iframe');
@@ -1782,7 +1939,7 @@ function syncToCloud(manual=true){
     form.action=cfg.cloudUrl;
     form.target='memoryCloudFrame';
     form.style.display='none';
-    const fields={action:'save',payload:cloudJson()};
+    const fields={action:'save',key:cfg.cloudKey,payload:cloudJson()};
     Object.entries(fields).forEach(([name,value])=>{
       const input=document.createElement('input');
       input.type='hidden';
@@ -1793,7 +1950,7 @@ function syncToCloud(manual=true){
     document.body.appendChild(form);
     form.submit();
     setTimeout(()=>{form.remove();cloudSyncBusy=false;},2200);
-    if(manual)showToast('Cloud backup request sent');
+    if(manual)showToast('Cloud backup sent');
   }catch(err){
     console.error(err);
     cloudSyncBusy=false;
@@ -1816,7 +1973,7 @@ window.memoryBoxRestoreCallback=function(packet){
     showToast('Cloud backup restored');
   }catch(err){
     console.error(err);
-    showToast(err.message||'Cloud restore failed');
+    showToast('Could not restore the cloud backup');
   }finally{
     document.getElementById('memoryCloudRestoreScript')?.remove();
   }
@@ -1825,7 +1982,7 @@ function restoreFromCloud(){
   if(!memoryCloudConfigured()){showToast('Owner cloud is not configured yet');return;}
   const cfg=window.MEMORY_BOX_CONFIG;
   const callback='memoryBoxRestoreCallback';
-  const src=cfg.cloudUrl+'?action=restore&callback='+callback+'&t='+Date.now();
+  const src=cfg.cloudUrl+'?action=restore&key='+encodeURIComponent(cfg.cloudKey)+'&callback='+callback+'&t='+Date.now();
   document.getElementById('memoryCloudRestoreScript')?.remove();
   const script=document.createElement('script');
   script.id='memoryCloudRestoreScript';
@@ -1834,9 +1991,9 @@ function restoreFromCloud(){
   document.body.appendChild(script);
   showToast('Restoring cloud backup…');
 }
+
 document.getElementById('syncCloudBtn').addEventListener('click',()=>syncToCloud(true));
 document.getElementById('restoreCloudBtn').addEventListener('click',restoreFromCloud);
-
 /* ---------- backup ---------- */
 document.getElementById("exportBtn").addEventListener("click",()=>{
   // JSON backup includes photos because each uploaded photo is stored as a data URL in state.photos.
