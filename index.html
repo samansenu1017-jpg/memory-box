@@ -765,6 +765,15 @@ body.dark .field-wrap input,body.dark .field-wrap textarea,body.dark .field-wrap
           <div>
             <div class="stat"><strong>Owner-managed</strong><span>No Google sign-in on this device</span></div>
             <div class="stat"><strong>Local-first</strong><span>Your memories still work offline</span></div>
+            <div class="field-wrap" style="margin-top:14px">
+              <label for="sCloudUrl">Apps Script Web App URL</label>
+              <input id="sCloudUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+            </div>
+            <div class="field-wrap" style="margin-top:10px">
+              <label for="sCloudKey">Owner cloud key</label>
+              <input id="sCloudKey" type="password" placeholder="Enter the OWNER_KEY from Code.gs" autocomplete="off">
+            </div>
+            <button class="ghost" id="saveCloudConfigBtn" type="button" style="margin-top:4px">Save cloud configuration</button>
           </div>
           <div>
             <div class="row" style="margin-top:6px">
@@ -772,7 +781,7 @@ body.dark .field-wrap input,body.dark .field-wrap textarea,body.dark .field-wrap
               <button class="ghost" id="restoreCloudBtn">Restore from owner cloud</button>
             </div>
             <p id="driveHelp" style="font-size:.8rem;margin-bottom:0">
-              The app only needs the owner backend URL that was configured before this copy was sent.
+              Enter the Apps Script <b>/exec</b> URL and the same owner key used by <b>Code.gs</b>. The values are stored on this browser.
             </p>
           </div>
         </div>
@@ -2039,23 +2048,69 @@ document.getElementById("saveSettingsBtn").addEventListener("click",saveSettings
 /* ---------- Owner-managed cloud backup ---------- */
 let cloudSyncBusy=false;
 
+function getStoredCloudConfig(){
+  let stored={};
+  try{ stored=JSON.parse(localStorage.getItem("memoryBoxCloudConfig")||"{}"); }catch(_){}
+  const fileCfg=window.MEMORY_BOX_CONFIG || {};
+  return {
+    cloudUrl:String(stored.cloudUrl || fileCfg.cloudUrl || "").trim(),
+    cloudKey:String(stored.cloudKey || fileCfg.cloudKey || "").trim()
+  };
+}
 function memoryCloudConfigured(){
-  return !!(window.MEMORY_BOX_CONFIG?.cloudUrl &&
-    !String(window.MEMORY_BOX_CONFIG.cloudUrl).includes('PASTE_YOUR_') &&
-    window.MEMORY_BOX_CONFIG?.cloudKey &&
-    !String(window.MEMORY_BOX_CONFIG.cloudKey).includes('PASTE_'));
+  const cfg=getStoredCloudConfig();
+  return !!(
+    cfg.cloudUrl &&
+    cfg.cloudUrl.startsWith("https://script.google.com/macros/s/") &&
+    cfg.cloudUrl.includes("/exec") &&
+    cfg.cloudKey &&
+    !cfg.cloudUrl.includes("PASTE_YOUR_") &&
+    !cfg.cloudKey.includes("PASTE_")
+  );
 }
 function updateDriveUI(){
+  const cfg=getStoredCloudConfig();
   const configured=memoryCloudConfigured();
   document.getElementById('driveStatus').textContent=configured?'Owner cloud configured ✓':'Owner backup not configured';
   document.getElementById('syncCloudBtn').disabled=!configured;
   document.getElementById('restoreCloudBtn').disabled=!configured;
+  const urlInput=document.getElementById('sCloudUrl');
+  const keyInput=document.getElementById('sCloudKey');
+  if(urlInput && document.activeElement!==urlInput) urlInput.value=cfg.cloudUrl;
+  if(keyInput && document.activeElement!==keyInput) keyInput.value=cfg.cloudKey;
   const help=document.getElementById('driveHelp');
   if(configured){
-    help.textContent='Cloud backup is owner-managed. No Google account or OAuth screen is shown to the person using this app.';
+    help.innerHTML='Cloud configuration is present. Click <b>Sync to owner cloud</b> to save the current memory box.';
   }else{
-    help.textContent='The owner must finish the one-time backend setup before sending this app to another device.';
+    help.innerHTML='Enter your Apps Script <b>/exec</b> URL and the same <b>OWNER_KEY</b> used by Code.gs, then click <b>Save cloud configuration</b>.';
   }
+}
+function saveCloudConfigFromUI(){
+  const cloudUrl=document.getElementById('sCloudUrl').value.trim();
+  const cloudKey=document.getElementById('sCloudKey').value.trim();
+
+  if(!cloudUrl.startsWith("https://script.google.com/macros/s/") || !cloudUrl.includes("/exec")){
+    showToast("Enter the Apps Script Web App URL ending in /exec");
+    return;
+  }
+  if(!cloudKey){
+    showToast("Enter the owner cloud key from Code.gs");
+    return;
+  }
+
+  localStorage.setItem("memoryBoxCloudConfig",JSON.stringify({cloudUrl,cloudKey}));
+  updateDriveUI();
+  showToast("Cloud configuration saved");
+}
+document.getElementById("saveCloudConfigBtn")?.addEventListener("click",saveCloudConfigFromUI);
+function memoryCloudDiagnostic(){
+  const cfg=getStoredCloudConfig();
+  return {
+    configured:memoryCloudConfigured(),
+    hasUrl:!!cfg.cloudUrl,
+    validUrl:cfg.cloudUrl.startsWith("https://script.google.com/macros/s/") && cfg.cloudUrl.includes("/exec"),
+    hasKey:!!cfg.cloudKey
+  };
 }
 function cloudJson(){
   return JSON.stringify({
@@ -2071,7 +2126,7 @@ function syncToCloud(manual=true){
   }
   if(cloudSyncBusy)return;
   cloudSyncBusy=true;
-  const cfg=window.MEMORY_BOX_CONFIG;
+  const cfg=getStoredCloudConfig();
   try{
     // A native form POST avoids browser CORS preflight and works with a Google Apps Script web app.
     let iframe=document.getElementById('memoryCloudFrame');
@@ -2128,7 +2183,7 @@ window.memoryBoxRestoreCallback=function(packet){
 };
 function restoreFromCloud(){
   if(!memoryCloudConfigured()){showToast('Owner cloud is not configured yet');return;}
-  const cfg=window.MEMORY_BOX_CONFIG;
+  const cfg=getStoredCloudConfig();
   const callback='memoryBoxRestoreCallback';
   const src=cfg.cloudUrl+'?action=restore&key='+encodeURIComponent(cfg.cloudKey)+'&callback='+callback+'&t='+Date.now();
   document.getElementById('memoryCloudRestoreScript')?.remove();
